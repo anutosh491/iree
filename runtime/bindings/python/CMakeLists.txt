@@ -163,6 +163,8 @@ iree_py_library(
     iree_runtime_bindings_python_PyExtRt
 )
 
+option(IREE_BUILD_RUNTIME_PYTHON_TOOLS "Bundle runtime tools with Python bindings" ON)
+if(IREE_BUILD_RUNTIME_PYTHON_TOOLS)
 iree_symlink_tool(
   TARGET runtime
   FROM_TOOL_TARGET iree-as-module
@@ -290,6 +292,7 @@ if(_TRACY_ENABLED)
     FROM_TOOL_TARGET IREETracyCaptureServer
     TO_EXE_NAME iree/_runtime_libs/iree-tracy-capture
   )
+endif()
 endif()
 
 ################################################################################
@@ -454,6 +457,7 @@ install(
 # the end of the root file. While deferred calls are generally fragile, this
 # install is purely a leaf feature (with no other calls depending on its
 # sequencing), so this use is okay.
+if(IREE_BUILD_RUNTIME_PYTHON_TOOLS)
 cmake_language(EVAL CODE "
 cmake_language(DEFER DIRECTORY \"${IREE_SOURCE_DIR}\"
   CALL install
@@ -475,3 +479,4 @@ cmake_language(DEFER DIRECTORY \"${IREE_SOURCE_DIR}\"
   COMPONENT \"${_INSTALL_COMPONENT}\"
 )
 ")
+endif()

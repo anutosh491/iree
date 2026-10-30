@@ -338,6 +338,8 @@ function(add_iree_compiler_busybox_tool target)
   )
 endfunction()
 
+option(IREE_BUILD_COMPILER_PYTHON_TOOLS "Bundle compiler tools with Python bindings" ON)
+if(IREE_BUILD_COMPILER_PYTHON_TOOLS)
 add_iree_compiler_busybox_tool(
   IREECompilerIREECompileTool
   OUTPUT_NAME iree-compile
@@ -366,6 +368,7 @@ if(TARGET lld)
     SRCS
       LldTool.c
   )
+endif()
 endif()
 
 ################################################################################
