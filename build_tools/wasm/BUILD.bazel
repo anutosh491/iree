@@ -14,6 +14,8 @@
 # Used by iree_wasm_cc_test targets via sh_test.
 exports_files(
     [
+        "emscripten_companion.py",
+        "wasm_binary_bundler.py",
         "wasm_node_test_runner.sh",
         "wasm_test_main.mjs",
     ],

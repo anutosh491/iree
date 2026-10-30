@@ -282,6 +282,18 @@
         "runtime/CMakeLists.txt",
         "runtime/bindings/python/CMakeLists.txt"
       ]
+    },
+    {
+      "purpose": "Use libc time and embed existing JS proactor imports automatically for Emscripten libraries",
+      "files": [
+        "runtime/src/iree/base/internal/time.c",
+        "build_tools/wasm/emscripten_companion.py",
+        "build_tools/wasm/BUILD.bazel",
+        "runtime/src/iree/async/platform/js/emscripten_imports.c.in",
+        "runtime/src/iree/async/platform/js/BUILD.bazel",
+        "runtime/src/iree/async/platform/js/CMakeLists.txt",
+        "runtime/src/iree/async/platform/js/proactor_test.cc"
+      ]
     }
   ],
   "separate_work": [
@@ -291,7 +303,7 @@
     },
     {
       "scope": "Python host imports, Worker transport and resident-array adapter",
-      "status": "Existing working consumer preserved; installable binding integration still pending."
+      "status": "JS proactor imports are supplied internally for Emscripten; WebGPU host integration, Worker transport and resident-array packaging remain separate."
     },
     {
       "scope": "PJRT and ONNX/WebNN",

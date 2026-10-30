@@ -36,6 +36,13 @@ The compiler includes Torch and StableHLO frontends and WebGPU code generation.
 The native build helpers and target libraries use this same source selection.
 Python CLI bundling can be disabled while keeping the library APIs.
 
+Emscripten builds embed the existing JS proactor companion in the library with
+`EM_JS`. Loading the library initializes one host context per Emscripten instance;
+no Python- or notebook-specific host setup is needed for these imports. The
+adapter uses the JS backend's inline event-loop mode, so asynchronous operations
+still require the embedding application to yield and poll for completions.
+The clock uses Emscripten's libc `CLOCK_MONOTONIC` implementation.
+
 The optional LLVM-CPU path emits WebAssembly side modules and links them with
 LLD in process under Emscripten. IREE's existing system-library loader supplies
 `dlopen`/`dlsym`; it does not need a replacement loader. Enable
@@ -50,11 +57,11 @@ explicit paths and Clang resource headers can be supplied to the installed-SDK
 CMake configuration. These executables are build dependencies.
 
 The branch has configuration and focused source checks against published
-wasm32/wasm64 SDKs. Clean package builds, Python dynamic loading and the complete
-browser training notebook remain separate validation gates. Existing generated
+wasm32/wasm64 SDKs. Full compiler package builds/imports and the complete browser
+training notebook remain separate validation gates. Existing generated
 headers and cross-generation tooling were used by the source checks.
 
-Browser host imports, Worker coordination and resident-array bindings still
+WebGPU host imports, Worker coordination and resident-array bindings still
 need their own installed integration. This branch does not provide a complete
 JAX WebGPU PJRT plugin or a general PyTorch GPU Tensor backend. The working
 consumer disables constant evaluation and constant-expression hoisting; WebGPU
