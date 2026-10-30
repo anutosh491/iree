@@ -148,6 +148,28 @@ IREE_DEVICE_EXPORT float __gnu_h2f_ieee(short param) {
   return iree_h2f_ieee(param);
 }
 
+#if defined(__wasm__)
+// WebAssembly passes the bits of an emulated half in an integer register.
+IREE_DEVICE_EXPORT float __extendhfsf2(uint16_t param) {
+  return iree_h2f_ieee(param);
+}
+
+IREE_DEVICE_EXPORT short __gnu_f2h_ieee(float param) {
+  return iree_f2h_ieee(param);
+}
+
+IREE_DEVICE_EXPORT uint16_t __truncsfhf2(float param) {
+  return iree_f2h_ieee(param);
+}
+
+IREE_DEVICE_EXPORT double __extendhfdf2(uint16_t param) {
+  return (double)iree_h2f_ieee(param);
+}
+
+IREE_DEVICE_EXPORT uint16_t __truncdfhf2(double param) {
+  return iree_f2h_ieee((float)param);
+}
+#else
 IREE_DEVICE_EXPORT float __extendhfsf2(float param) {
   return iree_h2f_ieee(*((short*)&param));
 }
@@ -168,6 +190,8 @@ IREE_DEVICE_EXPORT double __extendhfdf2(float param) {
 IREE_DEVICE_EXPORT float __truncdfhf2(double param) {
   return __truncsfhf2((float)param);
 }
+
+#endif
 
 IREE_DEVICE_EXPORT double fma(double x, double y, double z) {
   return x * y + z;
