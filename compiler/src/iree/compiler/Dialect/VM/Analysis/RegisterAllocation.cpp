@@ -912,7 +912,19 @@ RegisterAllocation::remapSuccessorRegisters(Operation *branchOp,
     }
 
     if (srcReg != dstReg) {
-      srcDstRegs.push_back({srcReg, dstReg});
+      // The integer bank aliases i64 values with pairs of i32 registers.
+      // Resolve dependencies per word to preserve overlapping sources.
+      if (srcReg.isValue() && srcReg.byteWidth() == 8) {
+        auto wordType = IntegerType::get(
+            targetBlock->getParentOp()->getContext(), 32);
+        for (unsigned part = 0; part < 2; ++part) {
+          auto srcPart = Register::getValue(wordType, srcReg.ordinal() + part);
+          auto dstPart = Register::getValue(wordType, dstReg.ordinal() + part);
+          if (srcPart != dstPart) srcDstRegs.push_back({srcPart, dstPart});
+        }
+      } else {
+        srcDstRegs.push_back({srcReg, dstReg});
+      }
     }
   }
 
