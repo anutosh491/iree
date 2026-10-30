@@ -43,6 +43,8 @@ enum iree_async_js_operation_internal_flags_e {
   IREE_ASYNC_JS_OPERATION_INTERNAL_FLAG_CANCELLED = 1u << 0,
 };
 
+typedef struct iree_async_js_semaphore_wait_t iree_async_js_semaphore_wait_t;
+
 // JS proactor state. Single-threaded — no synchronization needed.
 typedef struct iree_async_proactor_js_t {
   // Must be first for safe casting.
@@ -56,6 +58,10 @@ typedef struct iree_async_proactor_js_t {
   // poll before checking the ring.
   iree_async_operation_t* ready_head;
   iree_async_operation_t* ready_tail;
+
+  // Semaphore timepoint callbacks enqueue completed waits for poll dispatch.
+  iree_async_js_semaphore_wait_t* completed_waits_head;
+  iree_async_js_semaphore_wait_t* completed_waits_tail;
 
   // Buffer for ring_drain results. Points into trailing allocation data.
   iree_async_js_completion_entry_t* completion_buffer;
