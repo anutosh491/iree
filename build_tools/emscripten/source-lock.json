@@ -1,0 +1,388 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-10-30",
+  "branch": "emscripten-6x-llvm23.1.2",
+  "iree_upstream_base": "9c7d2ae876b372b4b3304fec07e8f29df35979b1",
+  "baseline_selection": {
+    "base_llvm_revision": "abbcebe652841d4854aa9f47ff2ac2885a00ba89",
+    "base_llvm_version": "23.0.0git",
+    "next_iree_commit": "a869dc3c51071fe9942c59706ec193ca88395dc6",
+    "next_llvm_revision_prefix": "4641f4879e47",
+    "next_llvm_version": "24.0.0git",
+    "reason": "The selected base is the direct parent of IREE's first LLVM 24 integration and the previously exercised browser baseline."
+  },
+  "toolchain": {
+    "llvm_version": "23.1.2",
+    "llvm_release_commit": "85ac560262434c9ccfc0c183ec22d4138ed647fb",
+    "emscripten_version": "6.0.8",
+    "python_version": "3.14.3",
+    "exceptions": "-fwasm-exceptions",
+    "threading": false,
+    "target_architectures": [
+      "wasm32",
+      "wasm64"
+    ],
+    "bundled_llvm": false
+  },
+  "submodules": {
+    "third_party/llvm-project": {
+      "repository": "https://github.com/llvm/llvm-project.git",
+      "revision": "85ac560262434c9ccfc0c183ec22d4138ed647fb",
+      "role": "LLVM/MLIR 23.1.2; packaging uses installed SDK with IREE_BUILD_BUNDLED_LLVM=OFF"
+    },
+    "third_party/flatcc": {
+      "repository": "https://github.com/dvidelabs/flatcc.git",
+      "revision": "9362cd00f0007d8cbee7bff86e90fb4b6b227ff3"
+    },
+    "third_party/stablehlo": {
+      "repository": "https://github.com/iree-org/stablehlo.git",
+      "revision": "a2727e576ec6f18acc561333dfd70ef49d5f1cdf",
+      "patch": "patches/stablehlo-optional-tests.patch",
+      "patch_sha256": "5b37e6c90d63fdc7db09dfc3703022a9f1e39c473cb63a7b530d39a0e79c6cdc"
+    },
+    "third_party/torch-mlir": {
+      "repository": "https://github.com/iree-org/torch-mlir.git",
+      "revision": "ec8720bf26b0c7b35f98b93730b75fb2f4b0fccb",
+      "role": "IREE's embedded frontend sources; not the standalone upstream torch-mlir package"
+    },
+    "third_party/webgpu-headers": {
+      "repository": "https://github.com/webgpu-native/webgpu-headers.git",
+      "revision": "fa1c6ab4927ef1fa5731907b42b62ea93119866c"
+    }
+  },
+  "webgpu_compiler_dependencies": {
+    "dawn": {
+      "repository": "https://github.com/ArthurSonzogni/dawn",
+      "revision": "851ba3e50c354ef66d16c518d4341c01ed6828cc"
+    },
+    "abseil": {
+      "repository": "https://github.com/abseil/abseil-cpp",
+      "revision": "04f3bc01d12cf58c90a1bb68990f087fa3c3ed19",
+      "patch": "patches/abseil-emscripten-version-macros.patch",
+      "patch_upstream_commit": "dcd3be563a2d215e766508fb74a24b84f9d67c2a",
+      "patch_sha256": "b143690e6a42009a10648dceee8b654a1d03e2cd804775ed21d98b39876a5c2f"
+    },
+    "spirv-headers": {
+      "repository": "https://github.com/KhronosGroup/SPIRV-Headers",
+      "revision": "465055f6c9128772e20082e893d974146acf7a02"
+    },
+    "spirv-tools": {
+      "repository": "https://github.com/KhronosGroup/SPIRV-Tools",
+      "revision": "5a1eea1546c372a945a27d9b10e0a059db6cc651"
+    }
+  },
+  "merged_pr_backports": [
+    {
+      "number": 24720,
+      "title": "[Preprocessing] Handle batching dims and dynamic-update-slice scatter ops",
+      "commit": "21c6cd2649e6d060c95af90a715eab3a42e83d95",
+      "head": "39eb9372b406b1688848eaefc00aadbaae34ff31",
+      "url": "https://github.com/iree-org/iree/pull/24720"
+    },
+    {
+      "number": 24723,
+      "title": "Fix out-of-bounds crash in Stream affinity analysis for scf.while",
+      "commit": "175f034ac0c9a543ace1c029c78b25fd82e93703",
+      "head": "3b5f369a2ae76e9d41c57c77b94e7014e9c673cd",
+      "url": "https://github.com/iree-org/iree/pull/24723"
+    },
+    {
+      "number": 24795,
+      "title": "[Util] Filter non-returning region terminators",
+      "commit": "4734258341bd7b287d7cd562d119c0429451a738",
+      "head": "a91cdfb6f4dc83ab6f9622ec015152232d045f3c",
+      "url": "https://github.com/iree-org/iree/pull/24795"
+    },
+    {
+      "number": 24827,
+      "title": "[HAL] Fix inline execution models (initializer inlining and dispatch ABI)",
+      "commit": "ecbcdebe23a6e70ca5e350734c341c79eac98c72",
+      "head": "1bf9f410c0e73bae8bd86b5bb53dc0b053a66a51",
+      "url": "https://github.com/iree-org/iree/pull/24827"
+    },
+    {
+      "number": 24841,
+      "title": "[Stream] Fix ARC double-dealloca of aliased control-flow results",
+      "commit": "2a63818722d3f06d39aa421400f2de5a8d202623",
+      "head": "e92f03ecdbe4786fb52d38b754d6760349d4b45b",
+      "url": "https://github.com/iree-org/iree/pull/24841"
+    },
+    {
+      "number": 25042,
+      "title": "Fix async backend selection for Emscripten and wasm64",
+      "commit": "d5cf4e00dabe6f1595838e43a2c3567bbf0274d6",
+      "head": "50d33bd9ec3bab332f1864b1e3adc1cab3fc010f",
+      "url": "https://github.com/iree-org/iree/pull/25042",
+      "backport_note": "Same platform condition regenerated from Bazel for the older async CMake layout."
+    },
+    {
+      "number": 25049,
+      "title": "[CMake] Honor IREE_HOST_BIN_DIR for compiler TableGen",
+      "commit": "680ff4d23d48ea293454ad00b8b3043ca8f5915b",
+      "head": "9621504b8c6f0e99af6f9f06db49b3385d73c523",
+      "url": "https://github.com/iree-org/iree/pull/25049"
+    },
+    {
+      "number": 25051,
+      "title": "[SPIRV] Fix WebGPU SPIR-V client API detection",
+      "commit": "2db19113bd1eb61a35a44d6ad1a33e630f887584",
+      "head": "7bd93d27bbff63716900e0e2629f4b1276c21df1",
+      "url": "https://github.com/iree-org/iree/pull/25051"
+    },
+    {
+      "number": 25053,
+      "title": "[SPIRV] Unroll wide elementwise vector operations",
+      "commit": "10f73619936fcf6fe94c8235a32060cb43309d41",
+      "head": "dd21e8392d749b71d0bb5185a7919161402cc4f9",
+      "url": "https://github.com/iree-org/iree/pull/25053"
+    },
+    {
+      "number": 25054,
+      "title": "[Runtime][WASM] Handle wasm64 pointers in JS completion drains",
+      "commit": "2fa82191650807e985335b037cb732be8e7eeeb8",
+      "head": "29be253cf218b44330abb149a0690d766b444198",
+      "url": "https://github.com/iree-org/iree/pull/25054"
+    },
+    {
+      "number": 25068,
+      "title": "[WebGPU] Retain builtin buffers until submission",
+      "commit": "e76d73d02c255fef1643fbcda133d4acd28bdd40",
+      "head": "3ee3f65702f169f75b35713839fd278dea2f7088",
+      "url": "https://github.com/iree-org/iree/pull/25068"
+    },
+    {
+      "number": 25069,
+      "title": "[WebGPU] Fix staging buffer mapping lifetimes",
+      "commit": "2e4e490b0360bd2c06a888a649b02866317f6067",
+      "head": "955c755c77dba3b3275484a0cfad5fc1b2c1f38c",
+      "url": "https://github.com/iree-org/iree/pull/25069"
+    },
+    {
+      "number": 25070,
+      "title": "[WebGPU] Retain resources referenced by command buffers",
+      "commit": "624f6da9498ce3d96c1326e67d5ba09c27706466",
+      "head": "53cfbf6fc4ac8177c5d328bbdea79b9130ee5011",
+      "url": "https://github.com/iree-org/iree/pull/25070"
+    },
+    {
+      "number": 25075,
+      "title": "[WebGPU] Preserve Wasm host pointer widths",
+      "commit": "4a289dba52311c3e138ce444c340993a91005e26",
+      "head": "0357b85a2bff57968cde0ef474f342fa4f0a1ea2",
+      "url": "https://github.com/iree-org/iree/pull/25075",
+      "backport_note": "Combined with the final C mapping-lifetime fix and separate shader export names; CI step anchored to the older workflow. Pointer Node regression retained."
+    },
+    {
+      "number": 25100,
+      "title": "[Stream] Fix scf.while region signature conversion",
+      "commit": "bbabcc0584a4aeef83a24f2e2c63ec91d69f3f23",
+      "head": "d21bd05bd028bfb72602e846a36cef7c1ad4005f",
+      "url": "https://github.com/iree-org/iree/pull/25100"
+    },
+    {
+      "number": 25138,
+      "title": "[Torch] Expose non-finite initializer option",
+      "commit": "231afc92fc548c295986e4317a4b2565ca9e14bb",
+      "head": "e214bf9e3021c9d3c1b7f4cd0fb55f9361518277",
+      "url": "https://github.com/iree-org/iree/pull/25138",
+      "backport_note": "Adapted to pinned Torch-MLIR pass builder APIs and older IR assembly; flag and both lowering paths retained."
+    },
+    {
+      "number": 25146,
+      "title": "[CMake] Gate compiler test dependencies on IREE_BUILD_TESTS",
+      "commit": "89cb84587b217999e7b35e1c1af0613a26b2c3a4",
+      "head": "91171d72a97987215b31ee1cb75c24f68902e16c",
+      "url": "https://github.com/iree-org/iree/pull/25146"
+    },
+    {
+      "number": 25148,
+      "title": "[CMake] Create parent directories for TableGen outputs",
+      "commit": "634a6b59c60311209e35d8afed4fa09e370b65c5",
+      "head": "bfee0391433031f5d76bc358e2298b9791b15e2a",
+      "url": "https://github.com/iree-org/iree/pull/25148"
+    }
+  ],
+  "pending_pr_backports": [
+    {
+      "number": 24781,
+      "url": "https://github.com/iree-org/iree/pull/24781",
+      "head": "6878b033b0f5cd831fd43b9842106ca5f53fa39e",
+      "purpose": "VM reference ownership; replaces our private fanout fix. Source and tests applied unchanged.",
+      "validation": "Prior native compiler reference-register tests fail before/pass after; no browser execution of this exact revision yet."
+    }
+  ],
+  "local_patch_groups": [
+    {
+      "purpose": "LLVM 23.1.2 OptimizationLevel enum and LLVMFuncOp builder API compatibility",
+      "files": [
+        "compiler/src/iree/compiler/Utils/OptionUtils.h",
+        "compiler/src/iree/compiler/Utils/OptionUtils.cpp",
+        "compiler/plugins/target/LLVMCPU/internal/WindowsLinkerTool.cpp",
+        "compiler/src/iree/compiler/Codegen/LLVMCPU/ConvertToLLVM.cpp"
+      ]
+    },
+    {
+      "purpose": "Browser monotonic clock and semaphore/proactor waits",
+      "files": [
+        "runtime/src/iree/async/platform/js/proactor.c",
+        "runtime/src/iree/async/platform/js/proactor.h",
+        "runtime/src/iree/async/platform/js/proactor_imports.mjs",
+        "runtime/src/iree/async/platform/js/proactor_test.cc"
+      ]
+    },
+    {
+      "purpose": "WebGPU shader entry point versus HAL export name",
+      "files": [
+        "compiler/plugins/target/WebGPUSPIRV/WebGPUSPIRVTarget.cpp",
+        "runtime/src/iree/schemas/webgpu_executable_def.fbs",
+        "runtime/src/iree/hal/drivers/webgpu/webgpu_executable.c"
+      ]
+    },
+    {
+      "purpose": "Dispatch push constants lowered to uniform buffers",
+      "files": [
+        "compiler/plugins/target/WebGPUSPIRV/SPIRVToWGSL.cpp",
+        "runtime/src/iree/hal/drivers/webgpu/webgpu_builder.c",
+        "runtime/src/iree/hal/drivers/webgpu/webgpu_imports.mjs"
+      ]
+    },
+    {
+      "purpose": "Aligned same-buffer copies",
+      "files": [
+        "runtime/src/iree/hal/drivers/webgpu/webgpu_imports.mjs"
+      ]
+    },
+    {
+      "purpose": "Keep aliases of scalar-written bindings scalar for WGSL",
+      "files": [
+        "compiler/src/iree/compiler/Codegen/SPIRV/SPIRVVectorizeLoadStore.cpp",
+        "compiler/src/iree/compiler/Codegen/SPIRV/test/vectorize_load_store.mlir"
+      ]
+    },
+    {
+      "purpose": "Bound workgroup counts; minimal saved fix, overlapping upstream PR 25017 rather than its full implementation",
+      "files": [
+        "compiler/src/iree/compiler/Codegen/Common/ReconcileTranslationInfo.cpp",
+        "compiler/src/iree/compiler/Codegen/Common/test/reconcile_translation_info_linearize.mlir"
+      ],
+      "related_pr": 25017
+    },
+    {
+      "purpose": "Wasm compiler constant-evaluation runtime configuration",
+      "files": [
+        "compiler/src/iree/compiler/ConstEval/BUILD.bazel",
+        "compiler/src/iree/compiler/ConstEval/CMakeLists.txt",
+        "compiler/src/iree/compiler/ConstEval/Runtime.cpp"
+      ]
+    },
+    {
+      "purpose": "Separate compiler/runtime Python bindings and optional bundled CLI tools",
+      "files": [
+        "compiler/bindings/python/CMakeLists.txt",
+        "runtime/CMakeLists.txt",
+        "runtime/bindings/python/CMakeLists.txt"
+      ]
+    }
+  ],
+  "separate_work": [
+    {
+      "scope": "Published MLIR fixed-size/runtime-array alias unification",
+      "status": "Not supplied by this IREE fork; remains an SDK capability to resolve before claiming clean package-based GPU training."
+    },
+    {
+      "scope": "Python host imports, Worker transport and resident-array adapter",
+      "status": "Existing working consumer preserved; installable binding integration still pending."
+    },
+    {
+      "scope": "PJRT and ONNX/WebNN",
+      "status": "Separate frontend/runtime integration tracks."
+    },
+    {
+      "scope": "LAPACK/FFT/callback custom-call modules and single-device-only frontend rewrites",
+      "status": "Consumer integration preserved in iree-cpu-evaluation; not enabled implicitly by this source branch."
+    },
+    {
+      "scope": "MLIR positive-stride gather lowering",
+      "status": "An LLVM/MLIR SDK change; no private archive replacement added here."
+    }
+  ],
+  "validation_limits": [
+    "Source/configuration checks are not clean package linkage or browser validation.",
+    "Retained generated headers/cross-generation tools are used for syntax/configuration checks.",
+    "Working invocation disables constant evaluation and constant-expression hoisting."
+  ],
+  "cpu_scope": "Optional LLVM-CPU WebAssembly code generation, in-process LLD, upstream system-library loading and core lowering fixes; not a transparent JAX CPU backend.",
+  "cpu_configuration": {
+    "IREE_TARGET_BACKEND_LLVM_CPU": true,
+    "IREE_TARGET_BACKEND_LLVM_CPU_WASM": true,
+    "IREE_DEFAULT_CPU_LLVM_TARGETS": "WebAssembly",
+    "execution_model": "inline-dynamic",
+    "runtime_heap_alignment": 256,
+    "native_helpers": [
+      "iree-tblgen",
+      "iree-flatcc-cli",
+      "mlir_builder_tblgen",
+      "iree-c-embed-data"
+    ],
+    "native_llvm_tools": [
+      "clang",
+      "llvm-link",
+      "llvm-objcopy",
+      "lld"
+    ],
+    "llvm_tools_version": "23.1.2"
+  },
+  "cpu_patch_groups": [
+    {
+      "purpose": "Link Wasm CPU executables in process with LLD under Emscripten",
+      "files": [
+        "compiler/plugins/target/LLVMCPU/internal/WasmLinkerTool.cpp",
+        "compiler/plugins/target/LLVMCPU/internal/BUILD.bazel",
+        "compiler/plugins/target/LLVMCPU/internal/CMakeLists.txt",
+        "build_tools/bazel_to_cmake/bazel_to_cmake_converter.py"
+      ]
+    },
+    {
+      "purpose": "Allow explicit native LLVM build-tool paths with an installed cross SDK",
+      "files": [
+        "build_tools/cmake/iree_llvm.cmake"
+      ]
+    },
+    {
+      "purpose": "Preserve globals with non-TypedAttr initializers",
+      "files": [
+        "compiler/src/iree/compiler/Dialect/Util/Transforms/FoldGlobals.cpp"
+      ]
+    },
+    {
+      "purpose": "Unwrap all VM references for type-table lookup",
+      "files": [
+        "compiler/src/iree/compiler/Dialect/VM/Target/Bytecode/BytecodeEncoder.cpp"
+      ]
+    },
+    {
+      "purpose": "Resolve mixed-width integer branch moves per 32-bit register word",
+      "files": [
+        "compiler/src/iree/compiler/Dialect/VM/Analysis/RegisterAllocation.cpp"
+      ]
+    },
+    {
+      "purpose": "Preserve allocation side effects in inline HAL imports",
+      "files": [
+        "compiler/src/iree/compiler/Modules/HAL/Inline/hal_inline.imports.mlir"
+      ]
+    },
+    {
+      "purpose": "Use the WebAssembly integer ABI for emulated half helpers",
+      "files": [
+        "runtime/src/iree/builtins/device/device_generic.c"
+      ]
+    },
+    {
+      "purpose": "Legalize StableHLO composites to calls before lowering",
+      "files": [
+        "compiler/plugins/input/StableHLO/Conversion/Passes.cpp"
+      ]
+    }
+  ]
+}
