@@ -268,9 +268,33 @@ private:
   llvm::DenseMap<Value, unsigned> valueToVectorBitsMap;
   // A list of transfer ops that should be adjusted for memref vectorization.
   llvm::DenseSet<Operation *> transferOps;
+  llvm::DenseSet<std::pair<Attribute, Attribute>> scalarWrittenBindings;
 };
 
 MemRefUsageAnalysis::MemRefUsageAnalysis(mlir::Operation *op) {
+  if (auto target = IREE::HAL::ExecutableTargetAttr::lookup(op);
+      target && (target.getBackend() == "webgpu-spirv" ||
+                 target.getBackend() == "webgpu")) {
+    // WGSL component stores may write the whole vector. Keep every alias of a
+    // scalar-written binding scalar, including transfers scalarized below.
+    auto recordScalarWrite = [&](Value base) {
+      while (auto alignment = base.getDefiningOp<memref::AssumeAlignmentOp>())
+        base = alignment.getMemref();
+      if (auto binding =
+              base.getDefiningOp<IREE::HAL::InterfaceBindingSubspanOp>())
+        scalarWrittenBindings.insert(
+            {binding.getLayout(), binding.getBindingAttr()});
+    };
+    op->walk([&](memref::StoreOp store) {
+      if (store.getValue().getType().isIntOrFloat())
+        recordScalarWrite(store.getMemref());
+    });
+    op->walk([&](vector::TransferWriteOp write) {
+      SmallVector<Operation *> uses;
+      if (!isMemRefVectorizable(write.getBase(), uses))
+        recordScalarWrite(write.getBase());
+    });
+  }
   op->walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case([this](mlir::FunctionOpInterface funcOp) {
@@ -285,6 +309,14 @@ MemRefUsageAnalysis::MemRefUsageAnalysis(mlir::Operation *op) {
 }
 
 void MemRefUsageAnalysis::analyzeMemRefValue(Value value) {
+  Value base = value;
+  while (auto alignment = base.getDefiningOp<memref::AssumeAlignmentOp>())
+    base = alignment.getMemref();
+  if (auto binding = base.getDefiningOp<IREE::HAL::InterfaceBindingSubspanOp>()) {
+    if (scalarWrittenBindings.contains(
+            {binding.getLayout(), binding.getBindingAttr()}))
+      return;
+  }
   SmallVector<Operation *> vectorUses;
   LLVM_DEBUG(llvm::dbgs() << "analyzing value: " << value << "\n");
   if (unsigned vectorSize = isMemRefVectorizable(value, vectorUses)) {
