@@ -35,10 +35,10 @@
       "revision": "9362cd00f0007d8cbee7bff86e90fb4b6b227ff3"
     },
     "third_party/stablehlo": {
-      "repository": "https://github.com/iree-org/stablehlo.git",
-      "revision": "a2727e576ec6f18acc561333dfd70ef49d5f1cdf",
-      "patch": "patches/stablehlo-optional-tests.patch",
-      "patch_sha256": "5b37e6c90d63fdc7db09dfc3703022a9f1e39c473cb63a7b530d39a0e79c6cdc"
+      "repository": "https://github.com/anutosh491/stablehlo.git",
+      "revision": "26cf850fe6f4a6e63545289ae141b4dd1fc8ca22",
+      "base_revision": "a2727e576ec6f18acc561333dfd70ef49d5f1cdf",
+      "role": "LLVM-23-compatible source with optional CMake tests already applied"
     },
     "third_party/torch-mlir": {
       "repository": "https://github.com/iree-org/torch-mlir.git",

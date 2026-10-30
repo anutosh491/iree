@@ -17,14 +17,11 @@ For the external-SDK compiler build, initialize only the required submodules:
 ```sh
 git submodule update --init third_party/flatcc third_party/stablehlo \
   third_party/torch-mlir third_party/webgpu-headers
-git -C third_party/stablehlo apply \
-  ../../build_tools/emscripten/patches/stablehlo-optional-tests.patch
 ```
 
-Apply the StableHLO patch once to its pinned source, then configure with
-`STABLEHLO_ENABLE_TESTS=OFF`. Its default remains ON; compiler helper libraries
-remain available. The patch is kept here explicitly so a parent Git commit
-does not rely on uncommitted edits inside a submodule.
+The StableHLO submodule uses our LLVM-23-compatible fork with optional tests
+already applied. Configure with `STABLEHLO_ENABLE_TESTS=OFF`; its default
+remains ON and compiler helper libraries remain available.
 
 WebGPU code generation also uses the pinned Dawn/Tint, Abseil and SPIR-V
 dependencies listed in `source-lock.json` and the WebGPUSPIRV CMake files.
