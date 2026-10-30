@@ -168,10 +168,13 @@ export function createImports(context) {
     let cursor = 0;
     let encoder = null;
     const pendingCommandBuffers = [];
+    const constantBuffers = [];
 
+    try {
     while (cursor < text.length) {
       const header = text[cursor];
       const opcode = header & 0xFF;
+      const flags = (header >>> 8) & 0xFF;
       const sizeWords = header >>> 16;
 
       switch (opcode) {
@@ -360,11 +363,13 @@ export function createImports(context) {
 
           const pipeline = handles.get(pipelineHandle);
           const bgl = handles.get(bglHandle);
-          const bindingCount = (sizeWords - 6) / 3;
+          const hasConstants = (flags & 1) !== 0;
+          const bindingCount = hasConstants ? text[cursor + 6] : (sizeWords - 6) / 3;
+          const headerSize = hasConstants ? 7 : 6;
 
           const entries = [];
           for (let i = 0; i < bindingCount; i++) {
-            const base = cursor + 6 + i * 3;
+            const base = cursor + headerSize + i * 3;
             const slot = text[base];
             const offset = text[base + 1];
             const size = text[base + 2];
@@ -380,6 +385,23 @@ export function createImports(context) {
           const pass = encoder.beginComputePass();
           pass.setPipeline(pipeline);
           pass.setBindGroup(0, bindGroup);
+          if (hasConstants) {
+            const start = cursor + headerSize + bindingCount * 3;
+            const data = text.subarray(start, cursor + sizeWords);
+            const constantBuffer = device.createBuffer({
+              usage: 0x0040,  // UNIFORM
+              size: Math.max(16, data.byteLength),
+              mappedAtCreation: true,
+            });
+            constantBuffers.push(constantBuffer);
+            new Uint32Array(constantBuffer.getMappedRange()).set(data);
+            constantBuffer.unmap();
+            const constantsGroup = device.createBindGroup({
+              layout: pipeline.getBindGroupLayout(1),
+              entries: [{binding: 0, resource: {buffer: constantBuffer}}],
+            });
+            pass.setBindGroup(1, constantsGroup);
+          }
           pass.dispatchWorkgroups(workgroupX, workgroupY, workgroupZ);
           pass.end();
           break;
@@ -406,6 +428,10 @@ export function createImports(context) {
       }
 
       cursor += sizeWords;
+    }
+    } finally {
+      // Submission retains these buffers until GPU work completes.
+      for (const buffer of constantBuffers) buffer.destroy();
     }
   }
 
