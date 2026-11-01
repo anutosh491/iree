@@ -1389,6 +1389,9 @@ void SetupHalBindings(nanobind::module_ m) {
            [](uint64_t self, uint64_t other) { return self & other; })
       .def("__int__", [](enum iree_hal_memory_type_bits_t self) {
         return (uint64_t)self;
+      })
+      .def("__index__", [](enum iree_hal_memory_type_bits_t self) {
+        return (uint64_t)self;
       });
 
   py::enum_<enum iree_hal_buffer_compatibility_bits_t>(m, "BufferCompatibility")
@@ -1403,6 +1406,9 @@ void SetupHalBindings(nanobind::module_ m) {
       .def("__and__",
            [](uint64_t self, uint64_t other) { return self & other; })
       .def("__int__", [](enum iree_hal_buffer_compatibility_bits_t self) {
+        return (uint64_t)self;
+      })
+      .def("__index__", [](enum iree_hal_buffer_compatibility_bits_t self) {
         return (uint64_t)self;
       });
 
@@ -1443,6 +1449,9 @@ void SetupHalBindings(nanobind::module_ m) {
                          uint64_t other) { return self & other; })
       .def("__int__", [](enum iree_hal_buffer_usage_bits_t self) {
         return (uint64_t)self;
+      })
+      .def("__index__", [](enum iree_hal_buffer_usage_bits_t self) {
+        return (uint64_t)self;
       });
 
   py::enum_<enum iree_hal_memory_access_bits_t>(m, "MemoryAccess")
@@ -1457,6 +1466,9 @@ void SetupHalBindings(nanobind::module_ m) {
       .def("__and__",
            [](uint64_t self, uint64_t other) { return self & other; })
       .def("__int__", [](enum iree_hal_memory_access_bits_t self) {
+        return (uint64_t)self;
+      })
+      .def("__index__", [](enum iree_hal_memory_access_bits_t self) {
         return (uint64_t)self;
       });
 
@@ -1510,6 +1522,8 @@ void SetupHalBindings(nanobind::module_ m) {
       .value("FLOAT_8_E8M0_FNU", IREE_HAL_ELEMENT_TYPE_FLOAT_8_E8M0_FNU)
       .export_values()
       .def("__int__",
+           [](enum iree_hal_element_types_t self) { return (uint64_t)self; })
+      .def("__index__",
            [](enum iree_hal_element_types_t self) { return (uint64_t)self; });
 
   py::enum_<iree_hal_external_timepoint_type_t>(
