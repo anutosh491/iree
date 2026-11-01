@@ -7,6 +7,7 @@
 #include "iree/async/semaphore.h"
 
 #include "iree/async/frontier.h"
+#include "iree/async/proactor.h"
 #include "iree/base/api.h"
 #include "iree/base/threading/mutex.h"
 #include "iree/base/threading/notification.h"
@@ -895,6 +896,7 @@ IREE_API_EXPORT iree_status_t iree_async_semaphore_multi_wait(
       //   YIELD:  brief spin to catch fast signals, then block
       //   NONE:   straight to futex (no spin)
       // ACTIVE takes precedence if both ACTIVE and YIELD are set.
+#if !(defined(IREE_PLATFORM_WASM) && IREE_SYNCHRONIZATION_DISABLE_UNSAFE)
       iree_duration_t spin_ns;
       if (iree_any_bit_set(flags, IREE_ASYNC_WAIT_FLAG_ACTIVE)) {
         spin_ns = IREE_DURATION_INFINITE;
@@ -903,9 +905,50 @@ IREE_API_EXPORT iree_status_t iree_async_semaphore_multi_wait(
       } else {
         spin_ns = IREE_DURATION_ZERO;
       }
+#endif
       const iree_time_t deadline_ns = iree_timeout_as_deadline_ns(timeout);
       bool satisfied = false;
+#if defined(IREE_PLATFORM_WASM) && IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+      iree_host_size_t wait_index = 0;
+#endif
       while (!satisfied) {
+#if defined(IREE_PLATFORM_WASM) && IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+        // No background runner can deliver completions while this thread waits.
+        for (iree_host_size_t i = 0; i < count; ++i) {
+          iree_status_t poll_status = iree_async_proactor_poll(
+              semaphores[i]->proactor, iree_immediate_timeout(), NULL);
+          if (!iree_status_is_ok(poll_status) &&
+              !iree_status_is_deadline_exceeded(poll_status)) {
+            status = poll_status;
+            break;
+          }
+          iree_status_ignore(poll_status);
+        }
+        satisfied = iree_async_multi_wait_condition_fn(&condition);
+        if (!iree_status_is_ok(status) || satisfied ||
+            iree_time_now() >= deadline_ns) {
+          break;
+        }
+        if (iree_any_bit_set(flags, IREE_ASYNC_WAIT_FLAG_ACTIVE)) {
+          iree_processor_yield();
+          continue;
+        }
+        // Bound each blocking poll when several proactors may make progress.
+        iree_time_t poll_deadline = deadline_ns;
+        if (count > 1) {
+          poll_deadline = iree_min(deadline_ns, iree_time_now() + 1000000);
+        }
+        iree_status_t poll_status = iree_async_proactor_poll(
+            semaphores[wait_index]->proactor,
+            iree_make_deadline(poll_deadline), NULL);
+        wait_index = (wait_index + 1) % count;
+        if (!iree_status_is_ok(poll_status) &&
+            !iree_status_is_deadline_exceeded(poll_status)) {
+          status = poll_status;
+          break;
+        }
+        iree_status_ignore(poll_status);
+#else
         iree_wait_token_t wait_token =
             iree_notification_prepare_wait(&state.notification);
         if (iree_async_multi_wait_condition_fn(&condition)) {
@@ -915,8 +958,9 @@ IREE_API_EXPORT iree_status_t iree_async_semaphore_multi_wait(
                        &state.notification, wait_token, spin_ns, deadline_ns)) {
           break;  // Deadline expired.
         }
+#endif
       }
-      if (!satisfied) {
+      if (!satisfied && iree_status_is_ok(status)) {
         status = iree_status_from_code(IREE_STATUS_DEADLINE_EXCEEDED);
       }
     }
