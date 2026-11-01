@@ -263,7 +263,10 @@ export function startGPUWorker(createImports) {
       const values = new BigUint64Array(data.control, 128, words[4]);
       const args = Array.from(values, (v, i) => words[5] & (1 << i) ? v : Number(v));
       const length = words[7] >>> 0;
-      if (context.memory.buffer.byteLength < length) context.memory.buffer = new ArrayBuffer(length);
+      if (context.memory.buffer.byteLength < length) {
+        // Keep the scratch buffer aligned for the companion's typed-array views.
+        context.memory.buffer = new ArrayBuffer(Math.ceil(length / 8) * 8);
+      }
       new Uint8Array(context.memory.buffer, 0, length).set(new Uint8Array(data.payload, 0, length));
     try {
       const deferred = ['buffer_map_async', 'queue_on_submitted_work_done'].includes(name);
