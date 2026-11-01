@@ -257,6 +257,20 @@ class HalDevice:
         wait_semaphores: HalSemaphoreList,
         signal_semaphores: HalSemaphoreList,
     ) -> None: ...
+    def queue_read(
+        self,
+        source_file: FileHandle,
+        target_buffer: HalBuffer,
+        wait_semaphores: HalFence,
+        signal_semaphores: HalFence,
+    ) -> None: ...
+    def queue_write(
+        self,
+        source_buffer: HalBuffer,
+        target_file: FileHandle,
+        wait_semaphores: HalFence,
+        signal_semaphores: HalFence,
+    ) -> None: ...
     def queue_dealloca(
         self,
         buffer: HalBuffer,
