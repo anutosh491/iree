@@ -9,19 +9,35 @@
 #include "iree/async/platform/js/token_table.h"
 
 EM_JS(void, iree_async_emscripten_initialize, (void), {
-  if (Module['ireeAsyncHost']) return;
+  if (Module['ireeAsyncHost']?.attachWorker) return;
 
   @IREE_WASM_IMPORTS@
 
   // Share one host per Emscripten instance, including dynamically loaded libraries.
-  const context = {
+  const context = Module['ireeAsyncHost']?.context || {
     memory: wasmMemory,
     inline: true,
     clockNowNs: () => BigInt(Math.round(performance.now() * 1e6)),
   };
   Module['ireeAsyncHost'] = {
     context,
-    imports: createWasmImports(context).iree_proactor,
+    imports: Module['ireeAsyncHost']?.imports || createWasmImports(context).iree_proactor,
+    attachWorker(ringBuffer, cancelControl, postMessage, onComplete) {
+      const inline = this.imports;
+      const imports = createWasmImports({
+        ...context, inline: false, ringBuffer, ringCapacity: 256,
+        cancelControl, postMessage,
+      }).iree_proactor;
+      this.imports = {...imports, ring_drain(pointer, capacity) {
+        const inlineCount = inline.ring_drain(pointer, capacity);
+        if (inlineCount) return inlineCount;
+        const count = imports.ring_drain(pointer, capacity);
+        const offset = typeof pointer === 'bigint' ? Number(pointer) : pointer >>> 0;
+        const entries = new Int32Array(wasmMemory.buffer, offset, count * 2);
+        for (let i = 0; i < count; ++i) onComplete(entries[i * 2]);
+        return count;
+      }};
+    },
   };
 });
 

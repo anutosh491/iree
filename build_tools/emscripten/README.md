@@ -38,9 +38,9 @@ Python CLI bundling can be disabled while keeping the library APIs.
 
 Emscripten builds embed the existing JS proactor companion in the library with
 `EM_JS`. Loading the library initializes one host context per Emscripten instance;
-no Python- or notebook-specific host setup is needed for these imports. The
-adapter uses the JS backend's inline event-loop mode, so asynchronous operations
-still require the embedding application to yield and poll for completions.
+no Python- or notebook-specific host setup is needed for these imports. The compiler starts with the JS backend's inline mode. The optional WebGPU
+runtime connects its event Worker to the existing proactor completion ring,
+timer host and cancellation protocol when initialized.
 The clock uses Emscripten's libc `CLOCK_MONOTONIC` implementation.
 
 The optional LLVM-CPU path emits WebAssembly side modules and links them with
@@ -56,16 +56,43 @@ CPU-enabled builds additionally need native `iree-c-embed-data` and LLVM 23.1.2
 explicit paths and Clang resource headers can be supplied to the installed-SDK
 CMake configuration. These executables are build dependencies.
 
-The branch has configuration and focused source checks against published
-wasm32/wasm64 SDKs. Full compiler package builds/imports and the complete browser
-training notebook remain separate validation gates. Existing generated
-headers and cross-generation tooling were used by the source checks.
+The compiler package has passed wasm32/wasm64 browser import and in-process
+compilation checks. The runtime Python bridge has also been exercised on both
+widths with published PyTorch packages, direct Turbine export, FP32 arithmetic,
+linear training and convolution gradients. A combined recipe build is still a
+separate gate; these experiments reuse the already-built compiler package.
 
-WebGPU host imports, Worker coordination and resident-array bindings still
-need their own installed integration. This branch does not provide a complete
-JAX WebGPU PJRT plugin or a general PyTorch GPU Tensor backend. The working
-consumer disables constant evaluation and constant-expression hoisting; WebGPU
-code generation still uses O3.
+## Experimental runtime Python bridge
+
+Enable `IREE_BUILD_RUNTIME_PYTHON_BINDINGS`, disable
+`IREE_BUILD_RUNTIME_PYTHON_TOOLS`, set `IREE_CMAKE_PLUGIN_PATHS` to this directory,
+and select `IREE_EXTERNAL_HAL_DRIVERS=webgpu`. Emscripten filesystem integration
+also needs `IREE_FILE_IO_ENABLE=1` in the C and C++ compiler definitions.
+
+The package embeds the existing WebGPU companion and owns its event Worker.
+Initialize it asynchronously once, then use the usual runtime API:
+
+```python
+import iree.runtime as rt
+from iree.runtime.webgpu import get_webgpu_device
+
+device = await get_webgpu_device()
+config = rt.Config(device=device)
+```
+
+This requires a cross-origin-isolated browser Worker. The kernel's Wasm memory
+remains unshared and pthreads are not required. The Worker transports commands
+and transfers; IREE owns GPU buffers and compiled execution. No PyJS or Pyodide
+API is required by this integration.
+
+The tested scope is a single device with static FP32 computations, host transfers,
+repeated resident updates and cleanup. Finite waits, joined fences, failed transfer dependencies, Worker startup and
+shutdown failures, and device loss have focused browser checks. Multi-device
+concurrency and the complete PJRT contract remain separate work. This is not a general PyTorch GPU Tensor backend. The working compiler
+configuration uses O3, 256-byte resource alignment and mutable-binding aliasing;
+it disables constant evaluation and constant-expression hoisting. The resource
+configuration printer fix allows these resource settings to survive MLIR
+round-tripping, but the updated Wasm compiler must still be built and checked.
 
 The saved MLIR fixed-array alias and vector-gather changes belong to the LLVM/MLIR
 SDK; they are not implemented by replacing archives in this branch. Numerical

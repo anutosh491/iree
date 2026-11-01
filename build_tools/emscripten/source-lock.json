@@ -299,11 +299,11 @@
   "separate_work": [
     {
       "scope": "Published MLIR fixed-size/runtime-array alias unification",
-      "status": "Not supplied by this IREE fork; remains an SDK capability to resolve before claiming clean package-based GPU training."
+      "status": "Provided by the published MLIR 23.1.2 SDK (build >=8), not private archive replacement. Direct Turbine arithmetic and convolution/training checks pass with the built compiler artifacts on both widths."
     },
     {
       "scope": "Python host imports, Worker transport and resident-array adapter",
-      "status": "JS proactor imports are supplied internally for Emscripten; WebGPU host integration, Worker transport and resident-array packaging remain separate."
+      "status": "Experimental runtime-owned Emscripten WebGPU Worker and Python initialization are now supplied by this source tree. Static single-device FP32 training passes on both widths; general PJRT/device-loss/multi-device semantics remain separate."
     },
     {
       "scope": "PJRT and ONNX/WebNN",
@@ -396,5 +396,30 @@
         "compiler/plugins/input/StableHLO/Conversion/Passes.cpp"
       ]
     }
-  ]
+  ],
+  "runtime_python_port": {
+    "status": "experimental; combined recipe CI pending",
+    "entry_point": "iree.runtime.webgpu.get_webgpu_device",
+    "platforms": [
+      "emscripten-wasm32",
+      "emscripten-wasm64"
+    ],
+    "pthreads": false,
+    "requires_cross_origin_isolated_worker": true,
+    "compiler_definitions": [
+      "IREE_FILE_IO_ENABLE=1"
+    ],
+    "cmake_options": {
+      "IREE_CMAKE_PLUGIN_PATHS": "build_tools/emscripten",
+      "IREE_EXTERNAL_HAL_DRIVERS": "webgpu",
+      "IREE_BUILD_RUNTIME_PYTHON_BINDINGS": "ON",
+      "IREE_BUILD_RUNTIME_PYTHON_TOOLS": "OFF"
+    },
+    "remaining_validation": [
+      "multi-device concurrency and general PJRT semantics",
+      "updated compiler resource-config printer in a fresh Wasm build",
+      "fresh combined compiler/runtime recipe CI",
+      "publish async WebGPU pytester support and validate Linux browser execution"
+    ]
+  }
 }
