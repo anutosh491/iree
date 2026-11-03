@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_on": "2026-10-30",
+  "checked_on": "2026-11-03",
   "branch": "emscripten-6x-llvm23.1.2",
   "iree_upstream_base": "9c7d2ae876b372b4b3304fec07e8f29df35979b1",
   "baseline_selection": {
@@ -200,15 +200,72 @@
       "commit": "634a6b59c60311209e35d8afed4fa09e370b65c5",
       "head": "bfee0391433031f5d76bc358e2298b9791b15e2a",
       "url": "https://github.com/iree-org/iree/pull/25148"
+    },
+    {
+      "number": 24781,
+      "title": "[VM] Fix ref ownership in branch remaps",
+      "commit": "1306534b4fa05af671ddc256f6ad9af51dde18df",
+      "head": "430e45f976190336e9af5414c8b0078c30d350bb",
+      "url": "https://github.com/iree-org/iree/pull/24781",
+      "backport_note": "Final merged helper refactor; retain the independent mixed-width integer-register move fix."
+    },
+    {
+      "number": 25161,
+      "title": "[Stream] Print resource configuration booleans as keywords",
+      "commit": "1b4dcc5841a21ed8ed984017404a95be07470ae8",
+      "head": "71ec37bba59b9d8e7e074947cfd8c99027457e0c",
+      "url": "https://github.com/iree-org/iree/pull/25161"
+    },
+    {
+      "number": 25162,
+      "title": "[Python] Fix runtime extension output directory",
+      "commit": "0e1ceb6523a9cad3453b8bd792dac477acf561af",
+      "head": "02941a06d50dbf8b14acff7a5992218899527270",
+      "url": "https://github.com/iree-org/iree/pull/25162"
+    },
+    {
+      "number": 25164,
+      "title": "[Python] Support 32-bit host pointers in DLPack export",
+      "commit": "8dac7ff3be8c53d644ece60e6a31c884c6e28e84",
+      "head": "2aea340ed3f48be5e5cd6ba24d26da54a98c4b34",
+      "url": "https://github.com/iree-org/iree/pull/25164"
     }
   ],
   "pending_pr_backports": [
     {
-      "number": 24781,
-      "url": "https://github.com/iree-org/iree/pull/24781",
-      "head": "6878b033b0f5cd831fd43b9842106ca5f53fa39e",
-      "purpose": "VM reference ownership; replaces our private fanout fix. Source and tests applied unchanged.",
-      "validation": "Prior native compiler reference-register tests fail before/pass after; no browser execution of this exact revision yet."
+      "number": 25163,
+      "url": "https://github.com/iree-org/iree/pull/25163",
+      "head": "661c8c1e82695af896aa4d38a7cec29b9466a801",
+      "purpose": "[Python] Add `__index__` support to HAL enums",
+      "status": "open; using the reviewed or prepared implementation without claiming an upstream merge"
+    },
+    {
+      "number": 25165,
+      "url": "https://github.com/iree-org/iree/pull/25165",
+      "head": "ba380cfac900260f71722367ed5604abad80101a",
+      "purpose": "[Runtime] Use libc monotonic clock on Emscripten",
+      "status": "open; using the reviewed or prepared implementation without claiming an upstream merge"
+    },
+    {
+      "number": 25167,
+      "url": "https://github.com/iree-org/iree/pull/25167",
+      "head": "7ebee6001f941b7cbc8776b7e30067509e97ab2a",
+      "purpose": "[CMake] Honor LLVM tool overrides with installed SDKs",
+      "status": "open; using the reviewed or prepared implementation without claiming an upstream merge"
+    },
+    {
+      "number": 25168,
+      "url": "https://github.com/iree-org/iree/pull/25168",
+      "head": "50e68398aea5a349e7d4295bc93f3d3a25d8eacd",
+      "purpose": "[CMake] Make runtime Python tool bundling optional",
+      "status": "open; using the reviewed or prepared implementation without claiming an upstream merge"
+    },
+    {
+      "number": 25169,
+      "url": "https://github.com/iree-org/iree/pull/25169",
+      "head": "5670d9dfa467e6c1ce62eae49390ea584730b453",
+      "purpose": "[VM] Unwrap reference types during bytecode encoding",
+      "status": "open; using the reviewed or prepared implementation without claiming an upstream merge"
     }
   ],
   "local_patch_groups": [
@@ -398,14 +455,14 @@
     }
   ],
   "runtime_python_port": {
-    "status": "experimental; combined recipe CI pending",
+    "status": "async source integration validated locally; package rebuild remains separate",
     "entry_point": "iree.runtime.webgpu.get_webgpu_device",
     "platforms": [
       "emscripten-wasm32",
       "emscripten-wasm64"
     ],
     "pthreads": false,
-    "requires_cross_origin_isolated_worker": true,
+    "requires_cross_origin_isolated_worker": false,
     "compiler_definitions": [
       "IREE_FILE_IO_ENABLE=1"
     ],
@@ -416,10 +473,34 @@
       "IREE_BUILD_RUNTIME_PYTHON_TOOLS": "OFF"
     },
     "remaining_validation": [
-      "multi-device concurrency and general PJRT semantics",
-      "updated compiler resource-config printer in a fresh Wasm build",
-      "fresh combined compiler/runtime recipe CI",
-      "publish async WebGPU pytester support and validate Linux browser execution"
+      "general PJRT semantics and multi-device concurrency",
+      "fresh combined compiler/runtime package CI after selecting this source revision"
+    ],
+    "execution_model": "async-external / coarse-fences",
+    "async_api": "iree.runtime.AsyncSession",
+    "worker_model": "Python and the WebGPU companion share the kernel Worker; no nested GPU Worker",
+    "requires_shared_array_buffer": false,
+    "requires_jspi_or_asyncify": false
+  },
+  "async_runtime_validation": {
+    "toolchain": "Emscripten 6.0.8, LLVM/MLIR 23.1.2, Wasm exceptions, no pthreads",
+    "pointer_widths": [
+      "wasm32",
+      "wasm64"
+    ],
+    "scope": [
+      "in-browser compilation and WebGPU execution",
+      "resident buffers and queued transfers",
+      "semaphore completion, cancellation, timeout, stop and device-loss errors",
+      "native threaded and cooperative Python API lifecycle tests"
+    ],
+    "training_workload": "PyTorch/Turbine MNIST, FP32 SGD with momentum, three epochs, full training validated on wasm64",
+    "accuracy": 0.968,
+    "published_runtime_rollback": "a682ad82e3c3ea65d8f3ff004906f7be72baed95",
+    "limits": [
+      "single cached WebGPU device/proactor",
+      "coarse-fences calling convention; no transparent torch.compile GPU backend",
+      "compiler package reused for browser runtime validation; changed compiler translation units checked against LLVM/MLIR 23.1.2 with cached generated headers"
     ]
   }
 }

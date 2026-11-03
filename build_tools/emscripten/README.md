@@ -6,7 +6,7 @@ LLVM dependency from LLVM 23 to LLVM 24. The LLVM submodule here is pinned
 to the `llvmorg-23.1.2` release commit. Emscripten-forge builds use the installed
 LLVM/MLIR/Clang/LLD 23.1.2 SDK with `IREE_BUILD_BUNDLED_LLVM=OFF`.
 
-`source-lock.json` records merged upstream backports, the borrowed VM ownership
+`source-lock.json` records merged upstream backports, the final merged VM ownership
 fix, remaining local changes and dependency revisions. This is a compatibility
 branch; it is not an upstream-supported IREE/LLVM release combination.
 
@@ -38,9 +38,7 @@ Python CLI bundling can be disabled while keeping the library APIs.
 
 Emscripten builds embed the existing JS proactor companion in the library with
 `EM_JS`. Loading the library initializes one host context per Emscripten instance;
-no Python- or notebook-specific host setup is needed for these imports. The compiler starts with the JS backend's inline mode. The optional WebGPU
-runtime connects its event Worker to the existing proactor completion ring,
-timer host and cancellation protocol when initialized.
+no Python- or notebook-specific host setup is needed for these imports. The compiler and WebGPU runtime use the JS backend's inline completion mode in the kernel Worker.
 The clock uses Emscripten's libc `CLOCK_MONOTONIC` implementation.
 
 The optional LLVM-CPU path emits WebAssembly side modules and links them with
@@ -62,15 +60,17 @@ widths with published PyTorch packages, direct Turbine export, FP32 arithmetic,
 linear training and convolution gradients. A combined recipe build is still a
 separate gate; these experiments reuse the already-built compiler package.
 
-## Experimental runtime Python bridge
+## Asynchronous WebGPU Python API
 
 Enable `IREE_BUILD_RUNTIME_PYTHON_BINDINGS`, disable
 `IREE_BUILD_RUNTIME_PYTHON_TOOLS`, set `IREE_CMAKE_PLUGIN_PATHS` to this directory,
 and select `IREE_EXTERNAL_HAL_DRIVERS=webgpu`. Emscripten filesystem integration
 also needs `IREE_FILE_IO_ENABLE=1` in the C and C++ compiler definitions.
 
-The package embeds the existing WebGPU companion and owns its event Worker.
-Initialize it asynchronously once, then use the usual runtime API:
+The package embeds IREE's existing WebGPU companion in the Python kernel Worker.
+Its inline proactor drives completion callbacks while Python yields to the event
+loop. This needs no shared memory, COOP/COEP headers, pthreads, JSPI, Asyncify,
+PyJS calls, or notebook JavaScript setup.
 
 ```python
 import iree.runtime as rt
@@ -78,23 +78,44 @@ from iree.runtime.webgpu import get_webgpu_device
 
 device = await get_webgpu_device()
 config = rt.Config(device=device)
+with rt.AsyncSession(device) as execution:
+    inputs = await execution.upload(host_inputs)
+    function = execution.bind(exported_function, abi="coarse-fences")
+    pending = function.submit(inputs)
+    result = await execution.download(pending.value, wait_fences=[pending.fence])
 ```
 
-This requires a cross-origin-isolated browser Worker. The kernel's Wasm memory
-remains unshared and pthreads are not required. The Worker transports commands
-and transfers; IREE owns GPU buffers and compiled execution. No PyJS or Pyodide
-API is required by this integration.
+`exported_function` is a function loaded through `SystemContext`. Compile with
+`--iree-execution-model=async-external`. Torch imports already export a
+`main$async` function with the coarse-fences calling convention. An explicit
+`abi="coarse-fences"` declaration is needed for exports without runtime ABI
+reflection; the adapter does not infer calling conventions from function names.
 
-The tested scope is a single device with static FP32 computations, host transfers,
-repeated resident updates and cleanup. Finite waits, joined fences, failed transfer dependencies, Worker startup and
-shutdown failures, and device loss have focused browser checks. Multi-device
-concurrency and the complete PJRT contract remain separate work. This is not a general PyTorch GPU Tensor backend. The working compiler
-configuration uses O3, 256-byte resource alignment and mutable-binding aliasing;
-it disables constant evaluation and constant-expression hoisting. The resource
-configuration printer fix allows these resource settings to survive MLIR
-round-tripping, but the updated Wasm compiler must still be built and checked.
+Submissions expose a value and a completion fence. Pass that fence as a dependency
+when chaining operations without a host wait. This keeps parameters, optimizer
+state and intermediate arrays on the GPU. Bound the submission window to control
+in-flight memory. Await results when the host needs them or before releasing the
+execution session. Cancelling a Python await does not cancel submitted GPU work.
+Closing a session stops its Python waits.
+
+`AsyncSession` owns its completion bridge and event-loop lifetime. Native builds
+retain the existing threaded bridge; single-threaded builds register callbacks on
+IREE's existing async semaphore timepoints. Future cancellation is delivered on
+the owning Python event loop in both cases.
+
+The validated scope is one cached WebGPU device, repeated resident FP32 execution,
+host/file transfers, bounded PyTorch/Turbine training, cleanup, cancellation and
+failure propagation. Arithmetic and lifecycle checks cover wasm32 and wasm64;
+full MNIST training covers wasm64. Multi-device concurrency and the complete PJRT
+contract remain separate work. This is not a PyTorch GPU Tensor backend.
+
+The working compiler configuration uses O3, 256-byte resource alignment and
+mutable-binding aliasing; it disables constant evaluation and constant-expression
+hoisting. Existing SPIR-V, Tint/WGSL and runtime fixes remain in the source stack.
+The old synchronous Worker transport is preserved in source revision
+`a682ad82e3c3ea65d8f3ff004906f7be72baed95`, which is the rollback point for the
+published header-dependent runtime.
 
 The saved MLIR fixed-array alias and vector-gather changes belong to the LLVM/MLIR
-SDK; they are not implemented by replacing archives in this branch. Numerical
-LAPACK/FFT/callback adapters and single-device frontend rewrites remain preserved
-in their existing workspaces, outside the generic compiler/runtime port.
+SDK. Numerical LAPACK/FFT/callback adapters and single-device frontend rewrites
+remain outside this generic compiler/runtime port.
