@@ -18,6 +18,17 @@
 // Forward-declare the vtable (defined at bottom of file).
 static const iree_async_proactor_vtable_t iree_async_proactor_js_vtable;
 
+#if defined(IREE_PLATFORM_EMSCRIPTEN)
+// The Emscripten embedding re-enters this non-blocking poll after JS completions.
+extern void iree_async_emscripten_register_poll(uintptr_t proactor,
+                                              uintptr_t callback, int pointer_bits);
+extern void iree_async_emscripten_unregister_poll(uintptr_t proactor);
+static void iree_async_emscripten_poll(iree_async_proactor_t* proactor) {
+  iree_status_ignore(
+      iree_async_proactor_poll(proactor, iree_immediate_timeout(), NULL));
+}
+#endif
+
 //===----------------------------------------------------------------------===//
 // Ready queue
 //===----------------------------------------------------------------------===//
@@ -760,6 +771,9 @@ static void iree_async_proactor_js_unsubscribe_signal(
 //===----------------------------------------------------------------------===//
 
 static void iree_async_proactor_js_destroy(iree_async_proactor_t* proactor) {
+#if defined(IREE_PLATFORM_EMSCRIPTEN)
+  iree_async_emscripten_unregister_poll((uintptr_t)proactor);
+#endif
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_async_proactor_js_t* js_proactor = iree_async_proactor_js_cast(proactor);
   iree_allocator_t allocator = proactor->allocator;
@@ -847,6 +861,11 @@ iree_status_t iree_async_proactor_create_js(
       options.allowed_capabilities & supported_capabilities;
 
   *out_proactor = &proactor->base;
+#if defined(IREE_PLATFORM_EMSCRIPTEN)
+  iree_async_emscripten_register_poll((uintptr_t)*out_proactor,
+                                    (uintptr_t)iree_async_emscripten_poll,
+                                    sizeof(uintptr_t) * 8);
+#endif
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
 }

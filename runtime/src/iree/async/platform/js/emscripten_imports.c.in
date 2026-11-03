@@ -8,6 +8,22 @@
 
 #include "iree/async/platform/js/token_table.h"
 
+EM_JS(void, iree_async_emscripten_register_poll,
+      (uintptr_t proactor, uintptr_t callback, int pointer_bits), {
+  const host = Module['ireeAsyncHost'];
+  host.pollCallbacks ||= new Map();
+  const pointer = pointer_bits === 64 ? BigInt(proactor) : Number(proactor);
+  host.pollCallbacks.set(proactor, () => Module['wasmTable'].get(pointer_bits === 64 ? BigInt(callback) : Number(callback))(pointer));
+  host.context.exports ||= {};
+  host.context.exports.proactor_drain = () => {
+    for (const poll of host.pollCallbacks.values()) poll();
+  };
+});
+
+EM_JS(void, iree_async_emscripten_unregister_poll, (uintptr_t proactor), {
+  Module['ireeAsyncHost'].pollCallbacks?.delete(proactor);
+});
+
 EM_JS(void, iree_async_emscripten_initialize, (void), {
   if (Module['ireeAsyncHost']?.attachWorker) return;
 
