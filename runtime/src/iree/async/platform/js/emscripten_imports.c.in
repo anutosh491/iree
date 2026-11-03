@@ -25,7 +25,7 @@ EM_JS(void, iree_async_emscripten_unregister_poll, (uintptr_t proactor), {
 });
 
 EM_JS(void, iree_async_emscripten_initialize, (void), {
-  if (Module['ireeAsyncHost']?.attachWorker) return;
+  if (Module['ireeAsyncHost']?.imports) return;
 
   @IREE_WASM_IMPORTS@
 
@@ -38,22 +38,7 @@ EM_JS(void, iree_async_emscripten_initialize, (void), {
   Module['ireeAsyncHost'] = {
     context,
     imports: Module['ireeAsyncHost']?.imports || createWasmImports(context).iree_proactor,
-    attachWorker(ringBuffer, cancelControl, postMessage, onComplete) {
-      const inline = this.imports;
-      const imports = createWasmImports({
-        ...context, inline: false, ringBuffer, ringCapacity: 256,
-        cancelControl, postMessage,
-      }).iree_proactor;
-      this.imports = {...imports, ring_drain(pointer, capacity) {
-        const inlineCount = inline.ring_drain(pointer, capacity);
-        if (inlineCount) return inlineCount;
-        const count = imports.ring_drain(pointer, capacity);
-        const offset = typeof pointer === 'bigint' ? Number(pointer) : pointer >>> 0;
-        const entries = new Int32Array(wasmMemory.buffer, offset, count * 2);
-        for (let i = 0; i < count; ++i) onComplete(entries[i * 2]);
-        return count;
-      }};
-    },
+
   };
 });
 

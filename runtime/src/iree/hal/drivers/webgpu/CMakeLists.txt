@@ -85,15 +85,13 @@ iree_genrule(
   SRCS
     "${PROJECT_SOURCE_DIR}/build_tools/wasm/emscripten_webgpu.py"
     "${PROJECT_SOURCE_DIR}/build_tools/wasm/wasm_binary_bundler.py"
-    "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/platform/js/proactor_event_host.mjs"
-    "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/platform/js/proactor_ring.mjs"
-    "emscripten_worker.mjs"
+    "emscripten_inline.mjs"
     "webgpu_imports.h"
     "webgpu_imports.mjs"
   OUTS
     emscripten_imports.c
   CMD
-    "python3 $(rootpath //build_tools/wasm:emscripten_webgpu.py) --header $(rootpath webgpu_imports.h) --companion $(rootpath webgpu_imports.mjs) --host $(rootpath emscripten_worker.mjs) --output $(execpath emscripten_imports.c)"
+    "python3 $(rootpath //build_tools/wasm:emscripten_webgpu.py) --header $(rootpath webgpu_imports.h) --companion $(rootpath webgpu_imports.mjs) --host $(rootpath emscripten_inline.mjs) --output $(execpath emscripten_imports.c)"
 )
 
 if(EMSCRIPTEN)
