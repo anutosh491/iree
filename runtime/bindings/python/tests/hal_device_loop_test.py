@@ -71,7 +71,7 @@ class HalDeviceLoopBridgeTest(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.device = get_device("local-task")
+        self.device = get_device("local-sync")
         self.allocator = self.device.allocator
 
 
