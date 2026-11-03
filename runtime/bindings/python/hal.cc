@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -772,9 +773,11 @@ py::object HalDevice::CreateDLPackCapsule(HalBufferView& buffer_view,
           alloc, buffer, IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
           IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &external_buffer),
       "Cannot export device buffer");
-  if (offset > UINTPTR_MAX ||
-      external_buffer.handle.device_allocation.ptr > UINTPTR_MAX - offset) {
-    throw std::overflow_error("DLPack device address does not fit a host pointer");
+  constexpr auto max_address = std::numeric_limits<uintptr_t>::max();
+  if (offset > max_address ||
+      external_buffer.handle.device_allocation.ptr > max_address - offset) {
+    throw std::overflow_error(
+        "DLPack device address does not fit a host pointer");
   }
   // Set the data pointer to the offset, and the byte_offset to 0.
   // This SHOULD not be required, but some backends (torch GPU for example),
