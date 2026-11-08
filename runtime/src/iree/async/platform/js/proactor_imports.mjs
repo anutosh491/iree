@@ -104,6 +104,16 @@ export function createImports(context) {
   return createWorkerImports(context);
 }
 
+// Keep deadlines in the same clock domain as the Wasm host. WASI/Node hosts
+// use CLOCK_MONOTONIC; freestanding browser hosts use performance.now().
+function clockNowNs(context) {
+  if (context.clockNowNs) return context.clockNowNs();
+  if (typeof process !== 'undefined' && process.hrtime?.bigint) {
+    return process.hrtime.bigint();
+  }
+  return BigInt(Math.round(performance.now() * 1e6));
+}
+
 // Inline mode: wasm runs on the main thread. Completions are buffered in a
 // local JS array and drained synchronously during poll(). Timers use setTimeout
 // directly. schedule_drain coalesces re-entry via queueMicrotask.
@@ -171,9 +181,7 @@ function createInlineImports(context) {
     // queued locally and a drain is scheduled.
     // deadlineNs is BigInt (wasm i64) from CLOCK_MONOTONIC.
     timer_start(token, deadlineNs) {
-      // process.hrtime.bigint() uses CLOCK_MONOTONIC, matching the wasm
-      // clock source (WASI clock_time_get with MONOTONIC).
-      const nowNs = process.hrtime.bigint();
+      const nowNs = clockNowNs(context);
       const delayNs = deadlineNs - nowNs;
       const delayMs = Math.max(0, Number(delayNs) / 1_000_000);
       const timerId = setTimeout(() => {
@@ -234,9 +242,8 @@ function createWorkerImports(context) {
 
     // Blocks until completions are available or deadline expires.
     // deadlineNs is BigInt (wasm i64) from CLOCK_MONOTONIC.
-    // Uses process.hrtime.bigint() which shares CLOCK_MONOTONIC's epoch.
     poll_wait(deadlineNs) {
-      const nowNs = process.hrtime.bigint();
+      const nowNs = clockNowNs(context);
       const remainingNs = deadlineNs - nowNs;
       const timeoutMs = Number(remainingNs) / 1_000_000;
       return ring.wait(timeoutMs);
