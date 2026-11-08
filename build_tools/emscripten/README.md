@@ -128,9 +128,9 @@ inline asynchronous WebGPU host for GPU execution. Local-task and embedded ELF
 remain disabled. The 256-byte host heap alignment is an explicit package policy.
 
 Use MLIR 23.1.2 build 9 or later for the finite erfc and SPIR-V alias fixes.
-The embedded Torch-MLIR dependency also needs the FMA backport from its separate
-integration branch before publishing the final recipe revision. The source lock
-tracks that pending pin; it must be resolved by the source commit script.
+The embedded Torch-MLIR dependency uses its separate IREE-compatible integration
+branch with the FMA backport already applied. The source lock and submodule
+record the same exact revision; the standalone package remains independent.
 
 The refreshed full package still needs CI. Saved notebook checks used development
 artifacts; they do not establish clean artifact parity on both pointer widths.

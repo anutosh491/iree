@@ -41,9 +41,13 @@
       "role": "LLVM-23-compatible source with optional CMake tests already applied"
     },
     "third_party/torch-mlir": {
-      "repository": "https://github.com/iree-org/torch-mlir.git",
-      "revision": "ec8720bf26b0c7b35f98b93730b75fb2f4b0fccb",
-      "role": "IREE's embedded frontend sources; not the standalone upstream torch-mlir package"
+      "repository": "https://github.com/anutosh491/torch-mlir.git",
+      "revision": "e653ead9acbdf0b145c0e10953f834db8c295116",
+      "role": "IREE-compatible embedded frontend with the LLVM23 FMA backport",
+      "base_revision": "ec8720bf26b0c7b35f98b93730b75fb2f4b0fccb",
+      "patches": [
+        "https://github.com/llvm/torch-mlir/pull/4871"
+      ]
     },
     "third_party/webgpu-headers": {
       "repository": "https://github.com/webgpu-native/webgpu-headers.git",
@@ -655,13 +659,6 @@
     "IREE_CMAKE_PLUGIN_PATHS": "build_tools/emscripten",
     "IREE_FILE_IO_ENABLE": 1,
     "IREE_HAL_HEAP_BUFFER_ALIGNMENT": 256
-  },
-  "pending_dependency_updates": {
-    "third_party/torch-mlir": {
-      "repository": "https://github.com/anutosh491/torch-mlir.git",
-      "branch": "iree-emscripten-6x-llvm23.1.2",
-      "required_change": "prims.fma backport; commit the prepared dependency branch before final source pin"
-    }
   },
   "sdk_backports": {
     "mlir_static_minimum_build": 9,
