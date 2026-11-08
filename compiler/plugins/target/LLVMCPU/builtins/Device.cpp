@@ -9,6 +9,7 @@
 #include "iree/builtins/device/libdevice_bitcode.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/MemoryBufferRef.h"
 #include "mlir/Support/LLVM.h"
 
@@ -98,10 +99,56 @@ static void overridePlatformGlobal(llvm::Module &module, StringRef globalName,
       llvm::ConstantInt::get(globalValue->getValueType(), APInt(32, newValue)));
 }
 
+static void specializeWasmFloat16Builtins(llvm::Module &module) {
+  auto &context = module.getContext();
+  auto *i16Type = llvm::Type::getInt16Ty(context);
+  auto *f32Type = llvm::Type::getFloatTy(context);
+  auto *f64Type = llvm::Type::getDoubleTy(context);
+  struct {
+    StringRef name;
+    llvm::Type *result;
+    llvm::Type *argument;
+  } builtins[] = {
+      {"__extendhfsf2", f32Type, i16Type},
+      {"__extendhfdf2", f64Type, i16Type},
+      {"__truncsfhf2", i16Type, f32Type},
+      {"__truncdfhf2", i16Type, f64Type},
+  };
+
+  // Drop the old bodies together, as the double helpers call the float helpers.
+  for (auto &builtin : builtins) {
+    module.getFunction(builtin.name)->dropAllReferences();
+  }
+  for (auto &builtin : builtins) {
+    module.getFunction(builtin.name)->eraseFromParent();
+    auto *function = llvm::Function::Create(
+        llvm::FunctionType::get(builtin.result, {builtin.argument}, false),
+        llvm::GlobalValue::ExternalLinkage, builtin.name, module);
+    llvm::IRBuilder<> builder(
+        llvm::BasicBlock::Create(context, "entry", function));
+    llvm::Value *argument = function->getArg(0);
+    if (builtin.argument == f64Type) {
+      argument = builder.CreateFPTrunc(argument, f32Type);
+    }
+    auto *conversion = module.getFunction(
+        builtin.argument == i16Type ? "iree_h2f_ieee" : "iree_f2h_ieee");
+    llvm::Value *result = builder.CreateCall(conversion, {argument});
+    if (builtin.result == f64Type) {
+      result = builder.CreateFPExt(result, f64Type);
+    }
+    builder.CreateRet(result);
+  }
+}
+
 void specializeDeviceModule(IREE::HAL::ExecutableVariantOp variantOp,
                             llvm::Module &module,
                             llvm::TargetMachine &targetMachine) {
   overridePlatformGlobal(module, "libdevice_platform_example_flag", 0u);
+  // Wasm passes half bits as integers. Select this ABI for the final target,
+  // since the same bitcode is also used as a fallback for native CPUs.
+  if (targetMachine.getTargetTriple().isWasm()) {
+    specializeWasmFloat16Builtins(module);
+  }
 }
 
 } // namespace mlir::iree_compiler::IREE::HAL
