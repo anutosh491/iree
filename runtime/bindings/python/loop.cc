@@ -7,14 +7,131 @@
 #include "./loop.h"
 
 #include <cstdio>
+#include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "./hal.h"
+#include "iree/async/semaphore.h"
 #include "iree/base/threading/mutex.h"
 
 namespace iree::python {
 
 namespace {
+
+#if IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+// Single-threaded hosts dispatch semaphore timepoints on their event loop.
+// Reuse that notification instead of creating a Python polling thread.
+class CooperativeHalDeviceLoopBridge {
+ public:
+  CooperativeHalDeviceLoopBridge(HalDevice device, py::object loop)
+      : device_(std::move(device)),
+        loop_(std::move(loop)),
+        alive_(std::make_shared<int>(0)) {}
+  CooperativeHalDeviceLoopBridge(const CooperativeHalDeviceLoopBridge&) =
+      delete;
+  CooperativeHalDeviceLoopBridge& operator=(
+      const CooperativeHalDeviceLoopBridge&) = delete;
+  ~CooperativeHalDeviceLoopBridge() { Stop(); }
+
+  void Stop() {
+    if (!alive_) return;
+    alive_.reset();
+    while (!pending_.empty()) Cancel(pending_.begin()->first);
+  }
+
+  py::object OnSemaphore(HalSemaphore semaphore, uint64_t payload,
+                         py::object value) {
+    if (!alive_) throw std::runtime_error("Device loop bridge is stopped");
+    py::object future = loop_.attr("create_future")();
+    size_t id = next_id_++;
+    auto entry = std::make_unique<Entry>();
+    entry->owner = this;
+    entry->id = id;
+    entry->semaphore = std::move(semaphore);
+    entry->future = future;
+    entry->value = std::move(value);
+    entry->timepoint.callback = Complete;
+    entry->timepoint.user_data = entry.get();
+    Entry* raw = entry.get();
+    std::weak_ptr<int> alive = alive_;
+    future.attr("add_done_callback")(
+        py::cpp_function([this, alive, id](py::object done) {
+          if (!alive.expired() && py::cast<bool>(done.attr("cancelled")()))
+            Cancel(id);
+        }));
+    pending_.emplace(id, std::move(entry));
+    iree_status_t status = iree_async_semaphore_acquire_timepoint(
+        reinterpret_cast<iree_async_semaphore_t*>(raw->semaphore.raw_ptr()),
+        payload, &raw->timepoint);
+    if (!iree_status_is_ok(status)) pending_.erase(id);
+    CheckApiStatus(status, "Registering device semaphore timepoint");
+    return future;
+  }
+
+ private:
+  struct Entry {
+    CooperativeHalDeviceLoopBridge* owner;
+    size_t id;
+    HalSemaphore semaphore;
+    py::object future;
+    py::object value;
+    iree_async_semaphore_timepoint_t timepoint = {};
+  };
+
+  void Cancel(size_t id) {
+    auto it = pending_.find(id);
+    if (it == pending_.end()) return;
+    // No callback can run concurrently in this single-threaded implementation.
+    bool cancelled = iree_async_semaphore_cancel_timepoint(
+        reinterpret_cast<iree_async_semaphore_t*>(
+            it->second->semaphore.raw_ptr()),
+        &it->second->timepoint);
+    IREE_ASSERT(cancelled);
+    auto entry = std::move(it->second);
+    pending_.erase(it);
+    try {
+      if (!py::cast<bool>(entry->future.attr("done")()))
+        entry->future.attr("cancel")();
+    } catch (py::python_error& e) {
+      e.discard_as_unraisable(py::str("Cancelling device semaphore future"));
+    }
+  }
+
+  static void Complete(void* user_data,
+                       iree_async_semaphore_timepoint_t* timepoint,
+                       iree_status_t status) {
+    py::gil_scoped_acquire acquire_gil;
+    Entry* raw = static_cast<Entry*>(user_data);
+    auto* owner = raw->owner;
+    auto node = owner->pending_.extract(raw->id);
+    auto entry = std::move(node.mapped());
+    std::string error;
+    if (!iree_status_is_ok(status)) error = ApiStatusToString(status);
+    iree_status_ignore(status);
+    try {
+      owner->loop_.attr("call_soon_threadsafe")(py::cpp_function(
+          [future = std::move(entry->future), value = std::move(entry->value),
+           error = std::move(error)]() {
+            if (py::cast<bool>(future.attr("done")())) return;
+            if (error.empty())
+              future.attr("set_result")(value);
+            else
+              future.attr("set_exception")(
+                  py::module_::import_("builtins").attr("RuntimeError")(error));
+          }));
+    } catch (py::python_error& e) {
+      e.discard_as_unraisable(py::str("Completing device semaphore future"));
+    }
+  }
+
+  HalDevice device_;
+  py::object loop_;
+  std::shared_ptr<int> alive_;
+  size_t next_id_ = 0;
+  std::unordered_map<size_t, std::unique_ptr<Entry>> pending_;
+};
+#endif
 
 static const char kHalDeviceLoopBridgeDocstring[] =
     R"(Bridges device semaphore signalling to asyncio futures.
@@ -22,11 +139,9 @@ static const char kHalDeviceLoopBridgeDocstring[] =
 This is intended to be run alongside an asyncio loop, allowing arbitrary
 semaphore timepoints to be bridged to the loop, satisfying futures.
 
-Internally, it starts a thread which spins to poll the requested semaphores
-(which all must be from the same device). It can be used in single-device
-cases as a simpler implementation than a full integration with an asyncio
-event loop, theoretically resulting in fewer heavy-weight, kernel/device
-synchronization interactions.
+Threaded hosts use a polling thread. Single-threaded hosts register semaphore
+timepoint callbacks and deliver completions on their event loop. All semaphores
+must belong to the same device.
 )";
 
 class HalDeviceLoopBridge {
@@ -305,6 +420,14 @@ class HalDeviceLoopBridge {
 }  // namespace
 
 void SetupLoopBindings(py::module_& m) {
+#if IREE_SYNCHRONIZATION_DISABLE_UNSAFE
+  py::class_<CooperativeHalDeviceLoopBridge>(m, "HalDeviceLoopBridge")
+      .def(py::init<HalDevice, py::object>(), py::arg("device"), py::arg("loop"))
+      .def("stop", &CooperativeHalDeviceLoopBridge::Stop)
+      .def("on_semaphore", &CooperativeHalDeviceLoopBridge::OnSemaphore,
+           py::arg("semaphore"), py::arg("payload"), py::arg("value").none())
+      .doc() = kHalDeviceLoopBridgeDocstring;
+#else
   py::class_<HalDeviceLoopBridge>(m, "HalDeviceLoopBridge")
       .def(py::init<HalDevice, py::object>(), py::arg("device"),
            py::arg("loop"))
@@ -312,6 +435,7 @@ void SetupLoopBindings(py::module_& m) {
       .def("on_semaphore", &HalDeviceLoopBridge::OnSemaphore,
            py::arg("semaphore"), py::arg("payload"), py::arg("value"))
       .doc() = kHalDeviceLoopBridgeDocstring;
+#endif
 }
 
 }  // namespace iree::python
