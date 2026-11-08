@@ -9,8 +9,10 @@
 #include <string.h>
 
 #include "iree/async/operations/scheduling.h"
+#include "iree/async/operations/semaphore.h"
 #include "iree/async/platform/js/imports.h"
 #include "iree/async/platform/js/token_table.h"
+#include "iree/async/semaphore.h"
 #include "iree/async/util/sequence_emulation.h"
 
 // Forward-declare the vtable (defined at bottom of file).
@@ -122,6 +124,137 @@ static void iree_async_proactor_js_complete(
 }
 
 //===----------------------------------------------------------------------===//
+// Semaphore waits
+//===----------------------------------------------------------------------===//
+
+typedef struct iree_async_js_semaphore_timepoint_t {
+  iree_async_semaphore_timepoint_t base;
+  iree_async_js_semaphore_wait_t* wait;
+  iree_host_size_t index;
+} iree_async_js_semaphore_timepoint_t;
+
+// JS callbacks and poll execute on the same wasm thread. Completion is deferred
+// to poll: acquire_timepoint may invoke callbacks synchronously, and a signal
+// may dispatch several timepoints from this allocation before returning.
+struct iree_async_js_semaphore_wait_t {
+  iree_async_js_semaphore_wait_t* next;
+  iree_async_proactor_js_t* proactor;
+  iree_async_semaphore_wait_operation_t* operation;
+  iree_host_size_t registered_count;
+  iree_host_size_t remaining_count;
+  bool enqueued;
+  iree_status_t status;
+  iree_async_js_semaphore_timepoint_t timepoints[];
+};
+
+static void iree_async_proactor_js_enqueue_wait(
+    iree_async_js_semaphore_wait_t* wait) {
+  if (wait->enqueued) return;
+  wait->enqueued = true;
+  iree_async_proactor_js_t* proactor = wait->proactor;
+  if (proactor->completed_waits_tail) {
+    proactor->completed_waits_tail->next = wait;
+  } else {
+    proactor->completed_waits_head = wait;
+  }
+  proactor->completed_waits_tail = wait;
+  iree_async_js_import_wake();
+}
+
+static void iree_async_proactor_js_semaphore_timepoint_callback(
+    void* user_data, iree_async_semaphore_timepoint_t* timepoint,
+    iree_status_t status) {
+  iree_async_js_semaphore_timepoint_t* entry =
+      (iree_async_js_semaphore_timepoint_t*)user_data;
+  iree_async_js_semaphore_wait_t* wait = entry->wait;
+  if (wait->enqueued) {
+    iree_status_ignore(status);
+    return;
+  }
+  if (!iree_status_is_ok(status)) {
+    wait->status = status;
+    iree_async_proactor_js_enqueue_wait(wait);
+  } else if (wait->operation->mode == IREE_ASYNC_WAIT_MODE_ANY) {
+    wait->operation->satisfied_index = entry->index;
+    iree_async_proactor_js_enqueue_wait(wait);
+  } else if (--wait->remaining_count == 0) {
+    iree_async_proactor_js_enqueue_wait(wait);
+  }
+}
+
+static iree_status_t iree_async_proactor_js_submit_semaphore_wait(
+    iree_async_proactor_js_t* proactor,
+    iree_async_semaphore_wait_operation_t* operation) {
+  iree_host_size_t total_size = 0;
+  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
+      sizeof(iree_async_js_semaphore_wait_t), &total_size,
+      IREE_STRUCT_FIELD_FAM(operation->count,
+                            iree_async_js_semaphore_timepoint_t)));
+  iree_async_js_semaphore_wait_t* wait = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(proactor->base.allocator,
+                                             total_size, (void**)&wait));
+  memset(wait, 0, total_size);
+  wait->proactor = proactor;
+  wait->operation = operation;
+  wait->remaining_count = operation->count;
+  wait->status = iree_ok_status();
+  operation->base.next = (iree_async_operation_t*)wait;
+  iree_async_operation_retain_resources(&operation->base);
+  IREE_TRACE(operation->base.submit_time_ns = iree_time_now();)
+  for (iree_host_size_t i = 0; i < operation->count; ++i) {
+    iree_async_semaphore_retain(operation->semaphores[i]);
+  }
+  for (iree_host_size_t i = 0; i < operation->count && !wait->enqueued; ++i) {
+    iree_async_js_semaphore_timepoint_t* entry = &wait->timepoints[i];
+    entry->wait = wait;
+    entry->index = i;
+    entry->base.callback = iree_async_proactor_js_semaphore_timepoint_callback;
+    entry->base.user_data = entry;
+    iree_status_t status = iree_async_semaphore_acquire_timepoint(
+        operation->semaphores[i], operation->values[i], &entry->base);
+    if (!iree_status_is_ok(status)) {
+      wait->status = status;
+      iree_async_proactor_js_enqueue_wait(wait);
+      break;
+    }
+    ++wait->registered_count;
+  }
+  if (operation->count == 0) iree_async_proactor_js_enqueue_wait(wait);
+  return iree_ok_status();
+}
+
+static iree_host_size_t iree_async_proactor_js_drain_waits(
+    iree_async_proactor_js_t* proactor) {
+  iree_host_size_t count = 0;
+  while (proactor->completed_waits_head) {
+    iree_async_js_semaphore_wait_t* wait = proactor->completed_waits_head;
+    proactor->completed_waits_head = wait->next;
+    if (!proactor->completed_waits_head) proactor->completed_waits_tail = NULL;
+    iree_async_semaphore_wait_operation_t* operation = wait->operation;
+    for (iree_host_size_t i = 0; i < wait->registered_count; ++i) {
+      iree_async_semaphore_cancel_timepoint(operation->semaphores[i],
+                                            &wait->timepoints[i].base);
+    }
+    for (iree_host_size_t i = 0; i < operation->count; ++i) {
+      iree_async_semaphore_release(operation->semaphores[i]);
+    }
+    iree_status_t status = wait->status;
+    if (iree_atomic_load(&operation->base.internal_flags,
+                         iree_memory_order_relaxed) &
+        IREE_ASYNC_JS_OPERATION_INTERNAL_FLAG_CANCELLED) {
+      iree_status_ignore(status);
+      status = iree_status_from_code(IREE_STATUS_CANCELLED);
+    }
+    operation->base.next = NULL;
+    iree_allocator_free(proactor->base.allocator, wait);
+    iree_async_proactor_js_complete(proactor, &operation->base, status,
+                                    IREE_ASYNC_COMPLETION_FLAG_NONE);
+    ++count;
+  }
+  return count;
+}
+
+//===----------------------------------------------------------------------===//
 // Submit
 //===----------------------------------------------------------------------===//
 
@@ -177,6 +310,10 @@ static iree_status_t iree_async_proactor_js_submit_one(
                                                    sequence);
       }
     }
+
+    case IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_WAIT:
+      return iree_async_proactor_js_submit_semaphore_wait(
+          proactor, (iree_async_semaphore_wait_operation_t*)operation);
 
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
@@ -335,6 +472,9 @@ static iree_status_t iree_async_proactor_js_poll(
   // Drain completions from the JS ring.
   completed_count += iree_async_proactor_js_drain_ring(js_proactor);
 
+  // Ring callbacks may signal GPU semaphores and complete pending waits.
+  completed_count += iree_async_proactor_js_drain_waits(js_proactor);
+
   // If nothing completed and timeout is not immediate, block for completions.
   if (completed_count == 0 && !iree_timeout_is_immediate(timeout)) {
     iree_time_t deadline_ns = iree_timeout_as_deadline_ns(timeout);
@@ -342,6 +482,7 @@ static iree_status_t iree_async_proactor_js_poll(
     if (wait_result == 0) {
       // Data available: drain again.
       completed_count += iree_async_proactor_js_drain_ring(js_proactor);
+      completed_count += iree_async_proactor_js_drain_waits(js_proactor);
     }
   }
 
@@ -403,6 +544,11 @@ static iree_status_t iree_async_proactor_js_cancel(
     case IREE_ASYNC_OPERATION_TYPE_NOP:
       // NOP is in the ready queue. The CANCELLED flag is checked when it's
       // dequeued during poll.
+      break;
+
+    case IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_WAIT:
+      iree_async_proactor_js_enqueue_wait(
+          (iree_async_js_semaphore_wait_t*)operation->next);
       break;
 
     case IREE_ASYNC_OPERATION_TYPE_SEQUENCE:
@@ -621,6 +767,8 @@ static void iree_async_proactor_js_destroy(iree_async_proactor_t* proactor) {
   // The ready queue should be empty by the time we destroy.
   IREE_ASSERT(js_proactor->ready_head == NULL,
               "JS proactor destroyed with operations in ready queue");
+  IREE_ASSERT(js_proactor->completed_waits_head == NULL,
+              "JS proactor destroyed with completed semaphore waits");
 
   iree_async_js_token_table_deinitialize(&js_proactor->token_table);
   iree_allocator_free(allocator, js_proactor);

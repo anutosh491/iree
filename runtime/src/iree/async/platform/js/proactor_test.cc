@@ -7,9 +7,12 @@
 #include "iree/async/platform/js/proactor.h"
 
 #include <cstring>
+#include <vector>
 
 #include "iree/async/operations/scheduling.h"
+#include "iree/async/operations/semaphore.h"
 #include "iree/async/proactor.h"
+#include "iree/async/semaphore.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -27,10 +30,35 @@ class JsProactorTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    for (auto* semaphore : semaphores_) {
+      iree_async_semaphore_release(semaphore);
+    }
     if (proactor_) {
       iree_async_proactor_release(proactor_);
       proactor_ = NULL;
     }
+  }
+
+  iree_async_semaphore_t* CreateSemaphore(uint64_t initial_value = 0) {
+    iree_async_semaphore_t* semaphore = nullptr;
+    IREE_EXPECT_OK(iree_async_semaphore_create(
+        proactor_, initial_value, 0, iree_allocator_system(), &semaphore));
+    semaphores_.push_back(semaphore);
+    return semaphore;
+  }
+
+  void InitWait(iree_async_semaphore_wait_operation_t* wait,
+                iree_async_semaphore_t** semaphores, uint64_t* values,
+                iree_host_size_t count, iree_async_wait_mode_t mode,
+                iree_status_code_t* status) {
+    memset(wait, 0, sizeof(*wait));
+    wait->base.type = IREE_ASYNC_OPERATION_TYPE_SEMAPHORE_WAIT;
+    wait->base.completion_fn = StatusRecordingCallback;
+    wait->base.user_data = status;
+    wait->semaphores = semaphores;
+    wait->values = values;
+    wait->count = count;
+    wait->mode = mode;
   }
 
   // Initializes a NOP operation with the given completion callback.
@@ -73,6 +101,7 @@ class JsProactorTest : public ::testing::Test {
   }
 
   iree_async_proactor_t* proactor_ = NULL;
+  std::vector<iree_async_semaphore_t*> semaphores_;
 };
 
 TEST_F(JsProactorTest, CreateAndDestroy) {
@@ -228,6 +257,165 @@ TEST_F(JsProactorTest, CancelFutureTimer) {
 
   // The native stub cancels synchronously, so the callback already fired.
   EXPECT_EQ(status_code, IREE_STATUS_CANCELLED);
+}
+
+TEST_F(JsProactorTest, SemaphoreWaitAll) {
+  iree_async_semaphore_t* semaphores[] = {CreateSemaphore(), CreateSemaphore()};
+  uint64_t values[] = {2, 3};
+  iree_status_code_t status = IREE_STATUS_UNKNOWN;
+  iree_async_semaphore_wait_operation_t wait;
+  InitWait(&wait, semaphores, values, 2, IREE_ASYNC_WAIT_MODE_ALL, &status);
+  IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait.base));
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[0], 1, nullptr));
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[1], 3, nullptr));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_DEADLINE_EXCEEDED,
+      iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
+  EXPECT_EQ(status, IREE_STATUS_UNKNOWN);
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[0], 2, nullptr));
+  // Timepoint callbacks defer user completion until poll.
+  EXPECT_EQ(status, IREE_STATUS_UNKNOWN);
+  iree_host_size_t completed = 0;
+  IREE_ASSERT_OK(iree_async_proactor_poll(proactor_, iree_immediate_timeout(),
+                                          &completed));
+  EXPECT_EQ(status, IREE_STATUS_OK);
+  EXPECT_EQ(completed, 1);
+}
+
+TEST_F(JsProactorTest, SemaphoreWaitAny) {
+  iree_async_semaphore_t* semaphores[] = {CreateSemaphore(), CreateSemaphore()};
+  uint64_t values[] = {1, 1};
+  iree_status_code_t status = IREE_STATUS_UNKNOWN;
+  iree_async_semaphore_wait_operation_t wait;
+  InitWait(&wait, semaphores, values, 2, IREE_ASYNC_WAIT_MODE_ANY, &status);
+  IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait.base));
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[1], 1, nullptr));
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[0], 1, nullptr));
+  iree_host_size_t completed = 0;
+  IREE_ASSERT_OK(iree_async_proactor_poll(proactor_, iree_immediate_timeout(),
+                                          &completed));
+  EXPECT_EQ(status, IREE_STATUS_OK);
+  EXPECT_EQ(wait.satisfied_index, 1);
+  EXPECT_EQ(completed, 1);
+}
+
+TEST_F(JsProactorTest, SemaphoreWaitAlreadySatisfiedAndEmpty) {
+  iree_async_semaphore_t* semaphore = CreateSemaphore(4);
+  uint64_t value = 4;
+  for (auto mode : {IREE_ASYNC_WAIT_MODE_ALL, IREE_ASYNC_WAIT_MODE_ANY}) {
+    for (iree_host_size_t count : {0, 1}) {
+      iree_status_code_t status = IREE_STATUS_UNKNOWN;
+      iree_async_semaphore_wait_operation_t wait;
+      InitWait(&wait, &semaphore, &value, count, mode, &status);
+      IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait.base));
+      EXPECT_EQ(status, IREE_STATUS_UNKNOWN);
+      IREE_ASSERT_OK(iree_async_proactor_poll(
+          proactor_, iree_immediate_timeout(), nullptr));
+      EXPECT_EQ(status, IREE_STATUS_OK);
+    }
+  }
+}
+
+TEST_F(JsProactorTest, SemaphoreWaitFailure) {
+  for (bool fail_before_submit : {false, true}) {
+    iree_async_semaphore_t* semaphores[] = {CreateSemaphore(),
+                                            CreateSemaphore()};
+    uint64_t values[] = {1, 1};
+    iree_status_code_t status = IREE_STATUS_UNKNOWN;
+    iree_async_semaphore_wait_operation_t wait;
+    InitWait(&wait, semaphores, values, 2, IREE_ASYNC_WAIT_MODE_ALL, &status);
+    if (fail_before_submit) {
+      iree_async_semaphore_fail(semaphores[0],
+                                iree_status_from_code(IREE_STATUS_DATA_LOSS));
+    }
+    IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait.base));
+    if (!fail_before_submit) {
+      iree_async_semaphore_fail(semaphores[0],
+                                iree_status_from_code(IREE_STATUS_DATA_LOSS));
+    }
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
+    EXPECT_EQ(status, IREE_STATUS_DATA_LOSS);
+    // The other timepoint was cancelled, so a later signal cannot re-complete.
+    IREE_ASSERT_OK(iree_async_semaphore_signal(semaphores[1], 1, nullptr));
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_DEADLINE_EXCEEDED,
+        iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
+  }
+}
+
+TEST_F(JsProactorTest, CancelSemaphoreWait) {
+  for (bool signal_before_cancel : {false, true}) {
+    iree_async_semaphore_t* semaphore = CreateSemaphore();
+    uint64_t value = 1;
+    iree_status_code_t status = IREE_STATUS_UNKNOWN;
+    iree_async_semaphore_wait_operation_t wait;
+    InitWait(&wait, &semaphore, &value, 1, IREE_ASYNC_WAIT_MODE_ALL, &status);
+    IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait.base));
+    if (signal_before_cancel) {
+      IREE_ASSERT_OK(iree_async_semaphore_signal(semaphore, value, nullptr));
+    }
+    IREE_ASSERT_OK(proactor_->vtable->cancel(proactor_, &wait.base));
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
+    EXPECT_EQ(status, IREE_STATUS_CANCELLED);
+    if (!signal_before_cancel) {
+      IREE_ASSERT_OK(iree_async_semaphore_signal(semaphore, value, nullptr));
+    }
+    IREE_EXPECT_STATUS_IS(
+        IREE_STATUS_DEADLINE_EXCEEDED,
+        iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
+  }
+}
+
+TEST_F(JsProactorTest, SemaphoreWaitDuplicateAndRetainedReferences) {
+  iree_async_semaphore_t* semaphore = CreateSemaphore();
+  iree_async_semaphore_t* semaphores[] = {semaphore, semaphore};
+  uint64_t values[] = {1, 1};
+  iree_status_code_t status = IREE_STATUS_UNKNOWN;
+  iree_async_semaphore_wait_operation_t wait;
+  InitWait(&wait, semaphores, values, 2, IREE_ASYNC_WAIT_MODE_ALL, &status);
+  IREE_ASSERT_OK(iree_async_proactor_submit_one(proactor_, &wait.base));
+  // The operation owns its references until completion.
+  iree_async_semaphore_release(semaphore);
+  semaphores_.back() = nullptr;
+  IREE_ASSERT_OK(iree_async_semaphore_signal(semaphore, 1, nullptr));
+  iree_host_size_t completed = 0;
+  IREE_ASSERT_OK(iree_async_proactor_poll(proactor_, iree_immediate_timeout(),
+                                          &completed));
+  EXPECT_EQ(status, IREE_STATUS_OK);
+  EXPECT_EQ(completed, 1);
+}
+
+TEST_F(JsProactorTest, SemaphoreWaitLinkedContinuation) {
+  for (bool fail : {false, true}) {
+    iree_async_semaphore_t* semaphore = CreateSemaphore();
+    uint64_t value = 1;
+    iree_status_code_t wait_status = IREE_STATUS_UNKNOWN;
+    iree_status_code_t nop_status = IREE_STATUS_UNKNOWN;
+    iree_async_semaphore_wait_operation_t wait;
+    InitWait(&wait, &semaphore, &value, 1, IREE_ASYNC_WAIT_MODE_ALL,
+             &wait_status);
+    wait.base.flags = IREE_ASYNC_OPERATION_FLAG_LINKED;
+    iree_async_nop_operation_t nop;
+    InitNop(&nop, StatusRecordingCallback, &nop_status);
+    iree_async_operation_t* operations[] = {&wait.base, &nop.base};
+    IREE_ASSERT_OK(proactor_->vtable->submit(proactor_, {operations, 2}));
+    if (fail) {
+      iree_async_semaphore_fail(semaphore,
+                                iree_status_from_code(IREE_STATUS_DATA_LOSS));
+    } else {
+      IREE_ASSERT_OK(iree_async_semaphore_signal(semaphore, value, nullptr));
+    }
+    IREE_ASSERT_OK(
+        iree_async_proactor_poll(proactor_, iree_immediate_timeout(), nullptr));
+    if (!fail) {
+      IREE_ASSERT_OK(iree_async_proactor_poll(
+          proactor_, iree_immediate_timeout(), nullptr));
+    }
+    EXPECT_EQ(wait_status, fail ? IREE_STATUS_DATA_LOSS : IREE_STATUS_OK);
+    EXPECT_EQ(nop_status, fail ? IREE_STATUS_CANCELLED : IREE_STATUS_OK);
+  }
 }
 
 TEST_F(JsProactorTest, UnsupportedOperationReturnsUnimplemented) {
