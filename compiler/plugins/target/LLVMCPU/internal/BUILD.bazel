@@ -29,5 +29,11 @@ iree_compiler_cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//llvm:TargetParser",
         "@llvm-project//mlir:Support",
-    ],
+    ] + select({
+        "//build_tools/bazel:iree_is_emscripten": [
+            "@llvm-project//lld:Common",
+            "@llvm-project//lld:Wasm",
+        ],
+        "//conditions:default": [],
+    }),
 )
