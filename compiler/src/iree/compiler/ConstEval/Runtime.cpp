@@ -12,7 +12,11 @@
 #include "iree/base/threading/numa.h"
 #include "iree/compiler/Dialect/Util/IR/UtilDialect.h"
 #include "iree/compiler/Dialect/VM/Target/Bytecode/BytecodeModuleTarget.h"
+#if defined(IREE_PLATFORM_WASM)
+#include "iree/hal/drivers/local_sync/registration/driver_module.h"
+#else
 #include "iree/hal/drivers/local_task/registration/driver_module.h"
+#endif
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 
@@ -455,7 +459,11 @@ LogicalResult CompiledBinary::initialize(Location loc, void *data,
   iree_hal_driver_t *driver = nullptr;
   if (iree_status_is_ok(status)) {
     status = iree_hal_driver_registry_try_create(
+#if defined(IREE_PLATFORM_WASM)
+        runtime.registry, iree_make_cstring_view("local-sync"),
+#else
         runtime.registry, iree_make_cstring_view("local-task"),
+#endif
         iree_allocator_system(), &driver);
   }
 
@@ -544,7 +552,11 @@ Runtime::Runtime() {
         iree_hal_driver_registry_allocate(iree_allocator_system(), &registry);
   }
   if (iree_status_is_ok(initStatus)) {
+#if defined(IREE_PLATFORM_WASM)
+    initStatus = iree_hal_local_sync_driver_module_register(registry);
+#else
     initStatus = iree_hal_local_task_driver_module_register(registry);
+#endif
   }
   if (iree_status_is_ok(initStatus)) {
     initStatus = iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,

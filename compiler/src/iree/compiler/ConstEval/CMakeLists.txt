@@ -58,6 +58,12 @@ iree_cc_library(
   PUBLIC
 )
 
+set(_Runtime_platform_deps "")
+if(EMSCRIPTEN OR IREE_ARCH STREQUAL "wasm_32" OR IREE_ARCH STREQUAL "wasm_64")
+  list(APPEND _Runtime_platform_deps iree::hal::drivers::local_sync::registration)
+else()
+  list(APPEND _Runtime_platform_deps iree::hal::drivers::local_task::registration)
+endif()
 iree_cc_library(
   NAME
     Runtime
@@ -75,10 +81,10 @@ iree_cc_library(
     iree::compiler::Dialect::Util::IR
     iree::compiler::Dialect::VM::Target::Bytecode
     iree::hal
-    iree::hal::drivers::local_task::registration
     iree::modules::hal
     iree::vm
     iree::vm::bytecode::module
+    ${_Runtime_platform_deps}
   PUBLIC
 )
 

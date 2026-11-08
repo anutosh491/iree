@@ -371,11 +371,16 @@ option(IREE_HAL_EXECUTABLE_PLUGIN_EMBEDDED_ELF "Enables the embedded dynamic lib
 option(IREE_HAL_EXECUTABLE_PLUGIN_SYSTEM_LIBRARY "Enables the system dynamic library plugin mechanism for local HAL drivers" ${IREE_HAL_EXECUTABLE_PLUGIN_SYSTEM_LIBRARY_DEFAULT})
 
 if(IREE_BUILD_COMPILER)
-  # The compiler minimally requires the local task driver with the default
-  # (embedded elf) executable loader. This is used by the ConstEval component,
-  # which can also be used with VMVX or other loaders/devices. See issue#17070.
-  set(IREE_HAL_DRIVER_LOCAL_TASK ON)
-  set(IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF ON)
+  # ConstEval executes compiled constant expressions on the compiler's host.
+  # WebAssembly uses the synchronous VMVX interpreter instead of native ELF.
+  if(EMSCRIPTEN OR IREE_ARCH STREQUAL "wasm_32" OR IREE_ARCH STREQUAL "wasm_64")
+    set(IREE_HAL_DRIVER_LOCAL_SYNC ON)
+    set(IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE ON)
+    set(IREE_TARGET_BACKEND_VMVX ON)
+  else()
+    set(IREE_HAL_DRIVER_LOCAL_TASK ON)
+    set(IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF ON)
+  endif()
 endif()
 
 message(STATUS "IREE HAL drivers:")
