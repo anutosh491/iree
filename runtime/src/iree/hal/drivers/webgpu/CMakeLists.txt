@@ -64,6 +64,10 @@ iree_cc_test(
     iree::testing::gtest_main
 )
 
+set(_webgpu_imports_platform_deps "")
+if(EMSCRIPTEN)
+  list(APPEND _webgpu_imports_platform_deps ::emscripten_imports)
+endif()
 iree_cc_library(
   NAME
     webgpu_imports
@@ -71,8 +75,38 @@ iree_cc_library(
     "webgpu_imports.h"
   DEPS
     iree::base
+    ${_webgpu_imports_platform_deps}
   PUBLIC
 )
+
+iree_genrule(
+  NAME
+    webgpu_emscripten_imports_gen
+  SRCS
+    "${PROJECT_SOURCE_DIR}/build_tools/wasm/emscripten_webgpu.py"
+    "${PROJECT_SOURCE_DIR}/build_tools/wasm/wasm_binary_bundler.py"
+    "emscripten_inline.mjs"
+    "webgpu_imports.h"
+    "webgpu_imports.mjs"
+  OUTS
+    emscripten_imports.c
+  CMD
+    "python3 $(rootpath //build_tools/wasm:emscripten_webgpu.py) --header $(rootpath webgpu_imports.h) --companion $(rootpath webgpu_imports.mjs) --host $(rootpath emscripten_inline.mjs) --output $(execpath emscripten_imports.c)"
+)
+
+if(EMSCRIPTEN)
+iree_cc_library(
+  NAME
+    emscripten_imports
+  HDRS
+    "emscripten.h"
+  SRCS
+    "emscripten_imports.c"
+  DEPS
+
+  PUBLIC
+)
+endif()
 
 iree_cc_library(
   NAME
@@ -120,6 +154,7 @@ iree_cc_library(
     iree::base
     iree::base::internal::arena
     iree::hal
+    iree::hal::utils::files
   PUBLIC
 )
 
@@ -231,7 +266,6 @@ iree_cc_library(
     iree::base
     iree::base::internal::arena
     iree::hal
-    iree::hal::utils::files
   PUBLIC
 )
 

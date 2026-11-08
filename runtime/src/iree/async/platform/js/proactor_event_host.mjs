@@ -27,11 +27,13 @@ const CANCEL_REQUEST = 0;
 const CANCEL_RESPONSE = 1;
 
 export class ProactorEventHost {
-  constructor(ringBuffer, cancelBuffer, ringCapacity) {
+  constructor(ringBuffer, cancelBuffer, ringCapacity,
+      clockNowNs = () => process.hrtime.bigint()) {
     this.ring = new ProactorRing(ringBuffer, ringCapacity);
     this.cancelControl = new Int32Array(cancelBuffer);
     this.timers = new Map();
     this.running = false;
+    this.clockNowNs = clockNowNs;
   }
 
   // Starts the cancel listener. Call before starting the worker.
@@ -62,11 +64,8 @@ export class ProactorEventHost {
   }
 
   _startTimer(token, deadlineNs) {
-    // deadlineNs is from CLOCK_MONOTONIC (via WASI clock_time_get).
-    // process.hrtime.bigint() uses the same clock, so the delay is correct.
-    // performance.now() has a different epoch (process start) and must not
-    // be used here — the mismatch would cause delays off by system uptime.
-    const nowNs = process.hrtime.bigint();
+    // Deadlines and the host clock must use the same monotonic epoch.
+    const nowNs = this.clockNowNs();
     const delayNs = deadlineNs - nowNs;
     const delayMs = Math.max(0, Number(delayNs) / 1_000_000);
     const timerId = setTimeout(() => {

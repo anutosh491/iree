@@ -42,12 +42,18 @@ extern "C" {
 
 #if defined(IREE_PLATFORM_WASM)
 
+#if defined(__EMSCRIPTEN__)
+#define IREE_HAL_WEBGPU_IMPORT(name)
+#else
+#define IREE_HAL_WEBGPU_IMPORT(name) \
+  __attribute__((import_module("iree_webgpu"), import_name(name)))
+#endif
+
 // Requests a GPU adapter. Async: completion delivered via proactor ring with
 // |token|. On success (status_code == 0), the adapter handle is written to
 // |out_adapter_handle_ptr| in wasm linear memory before the completion is
 // posted. |options_flags| is reserved for future use (power preference, etc.).
-__attribute__((import_module("iree_webgpu"),
-               import_name("request_adapter"))) extern void
+IREE_HAL_WEBGPU_IMPORT("request_adapter") extern void
 iree_hal_webgpu_import_request_adapter(uint32_t options_flags,
                                        uintptr_t out_adapter_handle_ptr,
                                        uint32_t token);
@@ -56,22 +62,19 @@ iree_hal_webgpu_import_request_adapter(uint32_t options_flags,
 // ring with |token|. On success (status_code == 0), the device handle is
 // written to |out_device_handle_ptr| in wasm linear memory before the
 // completion is posted.
-__attribute__((import_module("iree_webgpu"),
-               import_name("adapter_request_device"))) extern void
+IREE_HAL_WEBGPU_IMPORT("adapter_request_device") extern void
 iree_hal_webgpu_import_adapter_request_device(uint32_t adapter_handle,
                                               uintptr_t out_device_handle_ptr,
                                               uint32_t token);
 
 // Destroys a device and releases its handle.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_destroy"))) extern void
+IREE_HAL_WEBGPU_IMPORT("device_destroy") extern void
 iree_hal_webgpu_import_device_destroy(uint32_t device_handle);
 
 // Returns the queue handle associated with a device.
 // The queue is implicitly created with the device (WebGPU has one queue per
 // device). The returned handle is valid as long as the device is alive.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_get_queue"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("device_get_queue") extern uint32_t
 iree_hal_webgpu_import_device_get_queue(uint32_t device_handle);
 
 //===----------------------------------------------------------------------===//
@@ -82,45 +85,39 @@ iree_hal_webgpu_import_device_get_queue(uint32_t device_handle);
 // |usage| is a GPUBufferUsage bitmask.
 // |size| is the buffer size in bytes.
 // |mapped_at_creation| is 1 to create in mapped state, 0 otherwise.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_create_buffer"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("device_create_buffer") extern uint32_t
 iree_hal_webgpu_import_device_create_buffer(uint32_t device_handle,
                                             uint32_t usage, uint64_t size,
                                             uint32_t mapped_at_creation);
 
 // Destroys a buffer and releases its handle.
-__attribute__((import_module("iree_webgpu"),
-               import_name("buffer_destroy"))) extern void
+IREE_HAL_WEBGPU_IMPORT("buffer_destroy") extern void
 iree_hal_webgpu_import_buffer_destroy(uint32_t buffer_handle);
 
 // Initiates an async buffer map operation. Completion delivered via
 // proactor ring with |token|.
 // |mode|: 1 = MAP_READ, 2 = MAP_WRITE.
-__attribute__((import_module("iree_webgpu"),
-               import_name("buffer_map_async"))) extern void
+IREE_HAL_WEBGPU_IMPORT("buffer_map_async") extern void
 iree_hal_webgpu_import_buffer_map_async(uint32_t buffer_handle, uint32_t mode,
                                         uint64_t offset, uint64_t size,
                                         uint32_t token);
 
 // Copies data from a mapped GPU buffer range into wasm linear memory.
 // The buffer must be in mapped state. |dest_ptr| is a wasm memory pointer.
-__attribute__((import_module("iree_webgpu"),
-               import_name("buffer_get_mapped_range"))) extern void
+IREE_HAL_WEBGPU_IMPORT("buffer_get_mapped_range") extern void
 iree_hal_webgpu_import_buffer_get_mapped_range(uint32_t buffer_handle,
                                                uint64_t offset, uint64_t size,
                                                uintptr_t dest_ptr);
 
 // Copies data from wasm linear memory into a mapped GPU buffer range.
 // The buffer must be in mapped state. |src_ptr| is a wasm memory pointer.
-__attribute__((import_module("iree_webgpu"),
-               import_name("buffer_set_mapped_range"))) extern void
+IREE_HAL_WEBGPU_IMPORT("buffer_set_mapped_range") extern void
 iree_hal_webgpu_import_buffer_set_mapped_range(uint32_t buffer_handle,
                                                uint64_t offset, uint64_t size,
                                                uintptr_t src_ptr);
 
 // Unmaps a previously mapped buffer. The buffer returns to unmapped state.
-__attribute__((import_module("iree_webgpu"),
-               import_name("buffer_unmap"))) extern void
+IREE_HAL_WEBGPU_IMPORT("buffer_unmap") extern void
 iree_hal_webgpu_import_buffer_unmap(uint32_t buffer_handle);
 
 //===----------------------------------------------------------------------===//
@@ -128,53 +125,45 @@ iree_hal_webgpu_import_buffer_unmap(uint32_t buffer_handle);
 //===----------------------------------------------------------------------===//
 
 // Creates a command encoder for the device. Returns the encoder handle.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_create_command_encoder"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("device_create_command_encoder") extern uint32_t
 iree_hal_webgpu_import_device_create_command_encoder(uint32_t device_handle);
 
 // Begins a compute pass on the encoder. Returns the compute pass handle.
 // The pass handle is temporary — valid only until pass_end is called.
-__attribute__((import_module("iree_webgpu"),
-               import_name("encoder_begin_compute_pass"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("encoder_begin_compute_pass") extern uint32_t
 iree_hal_webgpu_import_encoder_begin_compute_pass(uint32_t encoder_handle);
 
 // Sets the compute pipeline for the current pass.
-__attribute__((import_module("iree_webgpu"),
-               import_name("pass_set_pipeline"))) extern void
+IREE_HAL_WEBGPU_IMPORT("pass_set_pipeline") extern void
 iree_hal_webgpu_import_pass_set_pipeline(uint32_t pass_handle,
                                          uint32_t pipeline_handle);
 
 // Binds a bind group at the specified index in the current pass.
-__attribute__((import_module("iree_webgpu"),
-               import_name("pass_set_bind_group"))) extern void
+IREE_HAL_WEBGPU_IMPORT("pass_set_bind_group") extern void
 iree_hal_webgpu_import_pass_set_bind_group(uint32_t pass_handle, uint32_t index,
                                            uint32_t bind_group_handle,
                                            uintptr_t dynamic_offsets_ptr,
                                            uint32_t dynamic_offsets_count);
 
 // Dispatches compute work.
-__attribute__((import_module("iree_webgpu"),
-               import_name("pass_dispatch_workgroups"))) extern void
+IREE_HAL_WEBGPU_IMPORT("pass_dispatch_workgroups") extern void
 iree_hal_webgpu_import_pass_dispatch_workgroups(uint32_t pass_handle,
                                                 uint32_t x, uint32_t y,
                                                 uint32_t z);
 
 // Ends the current compute pass.
-__attribute__((import_module("iree_webgpu"),
-               import_name("pass_end"))) extern void
+IREE_HAL_WEBGPU_IMPORT("pass_end") extern void
 iree_hal_webgpu_import_pass_end(uint32_t pass_handle);
 
 // Copies data between GPU buffers via the command encoder.
-__attribute__((import_module("iree_webgpu"),
-               import_name("encoder_copy_buffer_to_buffer"))) extern void
+IREE_HAL_WEBGPU_IMPORT("encoder_copy_buffer_to_buffer") extern void
 iree_hal_webgpu_import_encoder_copy_buffer_to_buffer(
     uint32_t encoder_handle, uint32_t src_handle, uint64_t src_offset,
     uint32_t dst_handle, uint64_t dst_offset, uint64_t size);
 
 // Finishes recording and returns a command buffer handle.
 // The encoder handle is consumed (invalid after this call).
-__attribute__((import_module("iree_webgpu"),
-               import_name("encoder_finish"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("encoder_finish") extern uint32_t
 iree_hal_webgpu_import_encoder_finish(uint32_t encoder_handle);
 
 //===----------------------------------------------------------------------===//
@@ -186,16 +175,14 @@ iree_hal_webgpu_import_encoder_finish(uint32_t encoder_handle);
 // |entry_point_ptr|/|entry_point_length|: pointer and length of the entry
 // point name in wasm memory.
 // Returns the pipeline handle.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_create_compute_pipeline"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("device_create_compute_pipeline") extern uint32_t
 iree_hal_webgpu_import_device_create_compute_pipeline(
     uint32_t device_handle, uint32_t layout_handle, uintptr_t wgsl_ptr,
     uint32_t wgsl_length, uintptr_t entry_point_ptr,
     uint32_t entry_point_length);
 
 // Returns a bind group layout from a compute pipeline.
-__attribute__((import_module("iree_webgpu"),
-               import_name("pipeline_get_bind_group_layout"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("pipeline_get_bind_group_layout") extern uint32_t
 iree_hal_webgpu_import_pipeline_get_bind_group_layout(uint32_t pipeline_handle,
                                                       uint32_t index);
 
@@ -204,8 +191,7 @@ iree_hal_webgpu_import_pipeline_get_bind_group_layout(uint32_t pipeline_handle,
 // wasm memory.
 // |layout_count|: number of bind group layouts.
 // Returns the pipeline layout handle.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_create_pipeline_layout"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("device_create_pipeline_layout") extern uint32_t
 iree_hal_webgpu_import_device_create_pipeline_layout(uint32_t device_handle,
                                                      uintptr_t layouts_ptr,
                                                      uint32_t layout_count);
@@ -217,8 +203,7 @@ iree_hal_webgpu_import_device_create_pipeline_layout(uint32_t device_handle,
 //    uint32_t has_dynamic_offset, uint64_t min_binding_size}
 // |entry_count|: number of entries.
 // Returns the bind group layout handle.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_create_bind_group_layout"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("device_create_bind_group_layout") extern uint32_t
 iree_hal_webgpu_import_device_create_bind_group_layout(uint32_t device_handle,
                                                        uintptr_t entries_ptr,
                                                        uint32_t entry_count);
@@ -229,8 +214,7 @@ iree_hal_webgpu_import_device_create_bind_group_layout(uint32_t device_handle,
 //   {uint32_t binding, uint32_t buffer_handle, uint64_t offset, uint64_t size}
 // |entry_count|: number of entries.
 // Returns the bind group handle.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_create_bind_group"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("device_create_bind_group") extern uint32_t
 iree_hal_webgpu_import_device_create_bind_group(uint32_t device_handle,
                                                 uint32_t layout_handle,
                                                 uintptr_t entries_ptr,
@@ -254,8 +238,7 @@ iree_hal_webgpu_import_device_create_bind_group(uint32_t device_handle,
 //   memory (4 uint32 handles: fill_pipeline, fill_bgl, copy_pipeline,
 //   copy_bgl).
 // Returns 0 on success, non-zero on error.
-__attribute__((import_module("iree_webgpu"),
-               import_name("execute_instructions"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("execute_instructions") extern uint32_t
 iree_hal_webgpu_import_execute_instructions(
     uint32_t device_handle, uint32_t queue_handle, uintptr_t block_table_ptr,
     uint32_t block_count, uint32_t block_word_capacity,
@@ -273,8 +256,7 @@ iree_hal_webgpu_import_execute_instructions(
 // |dynamic_binding_count|: number of dynamic slots [0, dynamic_binding_count).
 // |builtins_ptr|: pointer to builtins descriptor.
 // Returns the recording handle, or 0 on failure.
-__attribute__((import_module("iree_webgpu"),
-               import_name("create_recording"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("create_recording") extern uint32_t
 iree_hal_webgpu_import_create_recording(
     uint32_t device_handle, uintptr_t block_table_ptr, uint32_t block_count,
     uint32_t block_word_capacity, uint32_t last_block_word_count,
@@ -291,8 +273,7 @@ iree_hal_webgpu_import_create_recording(
 //   Must have exactly dynamic_binding_count entries (set at recording
 //   creation).
 // Returns 0 on success, non-zero on error.
-__attribute__((import_module("iree_webgpu"),
-               import_name("execute_recording"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("execute_recording") extern uint32_t
 iree_hal_webgpu_import_execute_recording(uint32_t recording_handle,
                                          uint32_t queue_handle,
                                          uintptr_t dynamic_binding_table_ptr);
@@ -303,15 +284,13 @@ iree_hal_webgpu_import_execute_recording(uint32_t recording_handle,
 
 // Submits a command buffer to the queue for execution.
 // The command buffer handle is consumed (invalid after this call).
-__attribute__((import_module("iree_webgpu"),
-               import_name("queue_submit"))) extern void
+IREE_HAL_WEBGPU_IMPORT("queue_submit") extern void
 iree_hal_webgpu_import_queue_submit(uint32_t queue_handle,
                                     uint32_t command_buffer_handle);
 
 // Registers a completion callback for when all currently submitted work on
 // the queue finishes. Completion delivered via proactor ring with |token|.
-__attribute__((import_module("iree_webgpu"),
-               import_name("queue_on_submitted_work_done"))) extern void
+IREE_HAL_WEBGPU_IMPORT("queue_on_submitted_work_done") extern void
 iree_hal_webgpu_import_queue_on_submitted_work_done(uint32_t queue_handle,
                                                     uint32_t token);
 
@@ -320,8 +299,7 @@ iree_hal_webgpu_import_queue_on_submitted_work_done(uint32_t queue_handle,
 // memory can be reused immediately after the call returns.
 // |data_ptr|: pointer to source data in wasm memory.
 // |data_size|: number of bytes to write.
-__attribute__((import_module("iree_webgpu"),
-               import_name("queue_write_buffer"))) extern void
+IREE_HAL_WEBGPU_IMPORT("queue_write_buffer") extern void
 iree_hal_webgpu_import_queue_write_buffer(uint32_t queue_handle,
                                           uint32_t buffer_handle,
                                           uint64_t buffer_offset,
@@ -334,15 +312,13 @@ iree_hal_webgpu_import_queue_write_buffer(uint32_t queue_handle,
 
 // Writes adapter info into wasm linear memory at |dest_ptr|.
 // The info struct layout is defined by iree_hal_webgpu_adapter_info_t.
-__attribute__((import_module("iree_webgpu"),
-               import_name("adapter_get_info"))) extern void
+IREE_HAL_WEBGPU_IMPORT("adapter_get_info") extern void
 iree_hal_webgpu_import_adapter_get_info(uint32_t adapter_handle,
                                         uintptr_t dest_ptr);
 
 // Writes device limits into wasm linear memory at |dest_ptr|.
 // The limits struct layout is defined by iree_hal_webgpu_device_limits_t.
-__attribute__((import_module("iree_webgpu"),
-               import_name("device_get_limits"))) extern void
+IREE_HAL_WEBGPU_IMPORT("device_get_limits") extern void
 iree_hal_webgpu_import_device_get_limits(uint32_t device_handle,
                                          uintptr_t dest_ptr);
 
@@ -355,24 +331,21 @@ iree_hal_webgpu_import_device_get_limits(uint32_t device_handle,
 // (from the iree_file import module). The JS side reads bytes from the file
 // object and calls queue.writeBuffer() with the data.
 // This is the zero-copy path for model weight loading.
-__attribute__((import_module("iree_webgpu"),
-               import_name("queue_write_buffer_from_file"))) extern void
+IREE_HAL_WEBGPU_IMPORT("queue_write_buffer_from_file") extern void
 iree_hal_webgpu_import_queue_write_buffer_from_file(
     uint32_t queue_handle, uint32_t buffer_handle, uint64_t buffer_offset,
     uint32_t fd, uint64_t file_offset, uint64_t data_size);
 
 // Returns the byte length of a file object. |fd| is a file object table index.
 // Returns 0 if the fd is invalid.
-__attribute__((import_module("iree_webgpu"),
-               import_name("file_get_length"))) extern uint64_t
+IREE_HAL_WEBGPU_IMPORT("file_get_length") extern uint64_t
 iree_hal_webgpu_import_file_get_length(uint32_t fd);
 
 // Copies data from a mapped GPU buffer into an existing file object.
 // The buffer must be in mapped state (via buffer_map_async).
 // |fd| is the target file object table index. The JS side reads from the
 // mapped buffer range and writes into the file object at |file_offset|.
-__attribute__((import_module("iree_webgpu"),
-               import_name("file_write_from_mapped"))) extern void
+IREE_HAL_WEBGPU_IMPORT("file_write_from_mapped") extern void
 iree_hal_webgpu_import_file_write_from_mapped(uint32_t buffer_handle,
                                               uint64_t buffer_offset,
                                               uint64_t size, uint32_t fd,
@@ -384,8 +357,7 @@ iree_hal_webgpu_import_file_write_from_mapped(uint32_t buffer_handle,
 // Returns the fd (file object table index), or 0 on failure.
 // The returned fd is independent of the GPU buffer — it remains valid after
 // the buffer is unmapped.
-__attribute__((import_module("iree_webgpu"),
-               import_name("buffer_export_mapped_to_file"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("buffer_export_mapped_to_file") extern uint32_t
 iree_hal_webgpu_import_buffer_export_mapped_to_file(uint32_t buffer_handle,
                                                     uint64_t offset,
                                                     uint64_t size);
@@ -397,8 +369,7 @@ iree_hal_webgpu_import_buffer_export_mapped_to_file(uint32_t buffer_handle,
 // Releases a handle from the JS-side handle table. Use this for objects that
 // don't have a specific destroy function (bind groups, bind group layouts,
 // pipeline layouts, compute pass encoders after end, shader modules).
-__attribute__((import_module("iree_webgpu"),
-               import_name("handle_release"))) extern void
+IREE_HAL_WEBGPU_IMPORT("handle_release") extern void
 iree_hal_webgpu_import_handle_release(uint32_t handle);
 
 //===----------------------------------------------------------------------===//
@@ -413,16 +384,14 @@ iree_hal_webgpu_import_handle_release(uint32_t handle);
 // The device queries this once at creation time and uses the result to gate
 // HOST_WAIT in semaphore compatibility — callers that check compatibility
 // before waiting will never attempt a blocking wait on the main thread.
-__attribute__((import_module("iree_webgpu"),
-               import_name("can_block"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("can_block") extern uint32_t
 iree_hal_webgpu_import_can_block(void);
 
 // Returns a non-zero bridge handle for a GPUDevice that the JS host
 // pre-configured, or 0 if no device was pre-configured. Used by the driver's
 // create_device_by_id to support inline-mode deployments where the host creates
 // the GPUDevice before wasm starts (browser main thread, node.js with dawn).
-__attribute__((import_module("iree_webgpu"),
-               import_name("get_preconfigured_device"))) extern uint32_t
+IREE_HAL_WEBGPU_IMPORT("get_preconfigured_device") extern uint32_t
 iree_hal_webgpu_import_get_preconfigured_device(void);
 
 #else  // !IREE_PLATFORM_WASM — native stubs

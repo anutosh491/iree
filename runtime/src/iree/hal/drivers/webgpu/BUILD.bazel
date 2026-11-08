@@ -20,6 +20,7 @@ load(
     "iree_runtime_cc_test",
 )
 load("//build_tools/bazel:iree_wasm_library.bzl", "iree_wasm_cc_library")
+load("//build_tools/bazel:iree_genrule.bzl", "iree_genrule")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -90,7 +91,39 @@ iree_runtime_cc_library(
     hdrs = ["webgpu_imports.h"],
     deps = [
         "//runtime/src/iree/base",
+    ] + select({
+        "//build_tools/bazel:iree_is_emscripten": [":emscripten_imports"],
+        "//conditions:default": [],
+    }),
+)
+
+iree_genrule(
+    name = "webgpu_emscripten_imports_gen",
+    srcs = [
+        "webgpu_imports.h",
+        "webgpu_imports.mjs",
+        "emscripten_inline.mjs",
+        "//build_tools/wasm:emscripten_webgpu.py",
+        "//build_tools/wasm:wasm_binary_bundler.py",
     ],
+    outs = ["emscripten_imports.c"],
+    cmd = " ".join([
+        "python3 $(rootpath //build_tools/wasm:emscripten_webgpu.py)",
+        "--header $(rootpath webgpu_imports.h)",
+        "--companion $(rootpath webgpu_imports.mjs)",
+        "--host $(rootpath emscripten_inline.mjs)",
+        "--output $(execpath emscripten_imports.c)",
+    ]),
+)
+
+iree_runtime_cc_library(
+    name = "emscripten_imports",
+    srcs = ["emscripten_imports.c"],
+    hdrs = ["emscripten.h"],
+    target_compatible_with = select({
+        "//build_tools/bazel:iree_is_emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
 )
 
 iree_runtime_cc_library(
@@ -130,6 +163,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/utils:files",
     ],
 )
 
@@ -221,7 +255,6 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/hal",
-        "//runtime/src/iree/hal/utils:files",
     ],
 )
 
