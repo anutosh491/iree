@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "./io.h"
 #include "./local_dlpack.h"
 #include "./numpy_interop.h"
 #include "./vm.h"
@@ -1550,6 +1551,52 @@ void SetupHalBindings(nanobind::module_ m) {
       .def("queue_copy", &HalDevice::QueueCopy, py::arg("source_buffer"),
            py::arg("target_buffer"), py::arg("wait_semaphores"),
            py::arg("signal_semaphores"), kHalDeviceQueueCopy)
+      .def(
+          "queue_read",
+          [](HalDevice& self, FileHandle& source, HalBuffer& target,
+             HalFence& wait, HalFence& signal) {
+            iree_hal_file_t* file = nullptr;
+            CheckApiStatus(
+                iree_hal_file_import(
+                    self.raw_ptr(), IREE_HAL_QUEUE_AFFINITY_ANY,
+                    IREE_HAL_MEMORY_ACCESS_READ, source.raw_ptr(),
+                    IREE_HAL_EXTERNAL_FILE_FLAG_NONE, &file),
+                "Importing input file");
+            iree_status_t status = iree_hal_device_queue_read(
+                self.raw_ptr(), IREE_HAL_QUEUE_AFFINITY_ANY,
+                iree_hal_fence_semaphore_list(wait.raw_ptr()),
+                iree_hal_fence_semaphore_list(signal.raw_ptr()),
+                file, 0, target.raw_ptr(), 0,
+                iree_hal_buffer_byte_length(target.raw_ptr()),
+                IREE_HAL_READ_FLAG_NONE);
+            iree_hal_file_release(file);
+            CheckApiStatus(status, "Reading file to buffer");
+          },
+          py::arg("source_file"), py::arg("target_buffer"),
+          py::arg("wait_semaphores"), py::arg("signal_semaphores"))
+      .def(
+          "queue_write",
+          [](HalDevice& self, HalBuffer& source, FileHandle& target,
+             HalFence& wait, HalFence& signal) {
+            iree_hal_file_t* file = nullptr;
+            CheckApiStatus(
+                iree_hal_file_import(
+                    self.raw_ptr(), IREE_HAL_QUEUE_AFFINITY_ANY,
+                    IREE_HAL_MEMORY_ACCESS_WRITE, target.raw_ptr(),
+                    IREE_HAL_EXTERNAL_FILE_FLAG_NONE, &file),
+                "Importing output file");
+            iree_status_t status = iree_hal_device_queue_write(
+                self.raw_ptr(), IREE_HAL_QUEUE_AFFINITY_ANY,
+                iree_hal_fence_semaphore_list(wait.raw_ptr()),
+                iree_hal_fence_semaphore_list(signal.raw_ptr()),
+                source.raw_ptr(), 0, file, 0,
+                iree_hal_buffer_byte_length(source.raw_ptr()),
+                IREE_HAL_WRITE_FLAG_NONE);
+            iree_hal_file_release(file);
+            CheckApiStatus(status, "Writing buffer to file");
+          },
+          py::arg("source_buffer"), py::arg("target_file"),
+          py::arg("wait_semaphores"), py::arg("signal_semaphores"))
       .def("create_dlpack_capsule", &HalDevice::CreateDLPackCapsule,
            py::arg("buffer_view"), py::arg("device_type_code"),
            py::arg("device_id"))
