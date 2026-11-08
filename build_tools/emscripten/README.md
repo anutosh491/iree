@@ -45,7 +45,8 @@ The LLVM-CPU path emits WebAssembly side modules and links them with
 LLD in process under Emscripten. IREE's existing system-library loader supplies
 `dlopen`/`dlsym`; it does not need a replacement loader. Enable
 `IREE_TARGET_BACKEND_LLVM_CPU` and `IREE_TARGET_BACKEND_LLVM_CPU_WASM`, and use
-the inline-dynamic execution model. The tested runtime heap alignment is 256.
+the inline-dynamic execution model. Host heap alignment uses the upstream
+64-byte default; WebGPU device allocations retain their separate 256-byte alignment.
 This adds an IREE CPU route alongside the existing JAX/XLA and PyTorch routes;
 it does not automatically select IREE for `jax.jit`.
 
@@ -125,7 +126,8 @@ remain outside this generic compiler/runtime port.
 `source-lock.json` records the required build options for both routes. Use
 `local-sync` and the system-library loader for threadless CPU execution, and the
 inline asynchronous WebGPU host for GPU execution. Local-task and embedded ELF
-remain disabled. The 256-byte host heap alignment is an explicit package policy.
+remain disabled. Keep the upstream 64-byte host heap alignment; the WebGPU
+allocator and compiler resource offsets retain their separate 256-byte alignment.
 
 Use MLIR 23.1.2 build 9 or later for the finite erfc and SPIR-V alias fixes.
 The embedded Torch-MLIR dependency uses its separate IREE-compatible integration

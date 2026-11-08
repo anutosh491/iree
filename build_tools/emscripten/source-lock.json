@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_on": "2026-11-07",
+  "checked_on": "2026-11-08",
   "branch": "emscripten-6x-llvm23.1.2-refresh",
   "iree_upstream_base": "9c7d2ae876b372b4b3304fec07e8f29df35979b1",
   "baseline_selection": {
@@ -522,7 +522,7 @@
     "IREE_TARGET_BACKEND_LLVM_CPU_WASM": true,
     "IREE_DEFAULT_CPU_LLVM_TARGETS": "WebAssembly",
     "execution_model": "inline-dynamic",
-    "runtime_heap_alignment": 256,
+    "runtime_heap_alignment": 64,
     "native_helpers": [
       "iree-tblgen",
       "iree-flatcc-cli",
@@ -603,8 +603,7 @@
     "pthreads": false,
     "requires_cross_origin_isolated_worker": false,
     "compiler_definitions": [
-      "IREE_FILE_IO_ENABLE=1",
-      "IREE_HAL_HEAP_BUFFER_ALIGNMENT=256"
+      "IREE_FILE_IO_ENABLE=1"
     ],
     "cmake_options": {
       "IREE_CMAKE_PLUGIN_PATHS": "build_tools/emscripten",
@@ -657,8 +656,7 @@
     "IREE_ENABLE_THREADING": false,
     "IREE_EXTERNAL_HAL_DRIVERS": "webgpu",
     "IREE_CMAKE_PLUGIN_PATHS": "build_tools/emscripten",
-    "IREE_FILE_IO_ENABLE": 1,
-    "IREE_HAL_HEAP_BUFFER_ALIGNMENT": 256
+    "IREE_FILE_IO_ENABLE": 1
   },
   "sdk_backports": {
     "mlir_static_minimum_build": 9,
