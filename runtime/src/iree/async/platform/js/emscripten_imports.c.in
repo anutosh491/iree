@@ -1,0 +1,70 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include <emscripten.h>
+
+#include "iree/async/platform/js/token_table.h"
+
+EM_JS(void, iree_async_emscripten_initialize, (void), {
+  if (Module['ireeAsyncHost']) return;
+
+  @IREE_WASM_IMPORTS@
+
+  // Share one host per Emscripten instance, including dynamically loaded libraries.
+  const context = {
+    memory: wasmMemory,
+    inline: true,
+    clockNowNs: () => BigInt(Math.round(performance.now() * 1e6)),
+  };
+  Module['ireeAsyncHost'] = {
+    context,
+    imports: createWasmImports(context).iree_proactor,
+  };
+});
+
+EM_JS(uint32_t, iree_async_emscripten_ring_drain,
+      (iree_async_js_completion_entry_t* buffer, uint32_t capacity), {
+  return Module['ireeAsyncHost'].imports.ring_drain(buffer, capacity);
+});
+EM_JS(uint32_t, iree_async_emscripten_poll_wait, (int64_t deadline_ns), {
+  return Module['ireeAsyncHost'].imports.poll_wait(deadline_ns);
+});
+EM_JS(void, iree_async_emscripten_timer_start,
+      (uint32_t token, int64_t deadline_ns), {
+  Module['ireeAsyncHost'].imports.timer_start(token, deadline_ns);
+});
+EM_JS(uint32_t, iree_async_emscripten_timer_cancel, (uint32_t token), {
+  return Module['ireeAsyncHost'].imports.timer_cancel(token);
+});
+EM_JS(void, iree_async_emscripten_wake, (void), {
+  Module['ireeAsyncHost'].imports.wake();
+});
+EM_JS(void, iree_async_emscripten_schedule_drain, (void), {
+  Module['ireeAsyncHost'].imports.schedule_drain();
+});
+
+__attribute__((constructor)) static void iree_async_emscripten_initialize_host(
+    void) {
+  iree_async_emscripten_initialize();
+}
+
+uint32_t iree_async_js_import_ring_drain(
+    iree_async_js_completion_entry_t* buffer, uint32_t capacity) {
+  return iree_async_emscripten_ring_drain(buffer, capacity);
+}
+uint32_t iree_async_js_import_poll_wait(int64_t deadline_ns) {
+  return iree_async_emscripten_poll_wait(deadline_ns);
+}
+void iree_async_js_import_timer_start(uint32_t token, int64_t deadline_ns) {
+  iree_async_emscripten_timer_start(token, deadline_ns);
+}
+uint32_t iree_async_js_import_timer_cancel(uint32_t token) {
+  return iree_async_emscripten_timer_cancel(token);
+}
+void iree_async_js_import_wake(void) { iree_async_emscripten_wake(); }
+void iree_async_js_import_schedule_drain(void) {
+  iree_async_emscripten_schedule_drain();
+}

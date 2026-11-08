@@ -11,6 +11,7 @@ load(
     "iree_runtime_cc_library",
     "iree_runtime_cc_test",
 )
+load("//build_tools/bazel:iree_genrule.bzl", "iree_genrule")
 load(
     "//build_tools/bazel:iree_wasm_library.bzl",
     "iree_wasm_cc_library",
@@ -51,6 +52,35 @@ iree_wasm_cc_library(
     module = "iree_proactor",
 )
 
+iree_genrule(
+    name = "emscripten_imports_gen",
+    srcs = [
+        "emscripten_imports.c.in",
+        "proactor_imports.mjs",
+        "//build_tools/wasm:emscripten_companion.py",
+        "//build_tools/wasm:wasm_binary_bundler.py",
+    ],
+    outs = ["emscripten_imports.c"],
+    cmd = " ".join([
+        "python3",
+        "$(rootpath //build_tools/wasm:emscripten_companion.py)",
+        "--source $(rootpath proactor_imports.mjs)",
+        "--module iree_proactor",
+        "--template $(rootpath emscripten_imports.c.in)",
+        "--output $(execpath emscripten_imports.c)",
+    ]),
+)
+
+iree_runtime_cc_library(
+    name = "emscripten_imports",
+    srcs = ["emscripten_imports.c"],
+    deps = [":token_table"],
+    target_compatible_with = select({
+        "//build_tools/bazel:iree_is_emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
 iree_runtime_cc_library(
     name = "proactor",
     srcs = ["proactor.c"],
@@ -62,7 +92,10 @@ iree_runtime_cc_library(
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:sequence_emulation",
         "//runtime/src/iree/base",
-    ],
+    ] + select({
+        "//build_tools/bazel:iree_is_emscripten": [":emscripten_imports"],
+        "//conditions:default": [],
+    }),
 )
 
 iree_runtime_cc_test(
@@ -82,6 +115,7 @@ iree_runtime_cc_test(
     deps = [
         ":proactor",
         "//runtime/src/iree/async",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
