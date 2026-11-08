@@ -98,8 +98,8 @@ static bool predicateApprox(StringRef name,
   if (isWebGPUBackend(target)) {
     // https://github.com/gpuweb/gpuweb/issues/5109 means we get compilation
     // errors whenever Inf or NaN values arise at compile-time, which is not
-    // something that we can really prevent. Avoiding this rewrite helps a bit.
-    return false;
+    // something that we can really prevent. Enable finite expansions only.
+    return name == math::CbrtOp::getOperationName();
   }
 
   // Compute hasFastExp from target attribute.
