@@ -70,7 +70,9 @@ static bool predicateRewrite(StringRef name,
 
 static bool predicateF32Cast(StringRef name,
                              IREE::HAL::ExecutableTargetAttr target) {
-  (void)target; // Currently unused.
+  if (isWebGPUBackend(target) && name == math::ErfcOp::getOperationName()) {
+    return true;
+  }
   StringRef atan = math::AtanOp::getOperationName();
   StringRef atan2 = math::Atan2Op::getOperationName();
   StringRef cos = math::CosOp::getOperationName();
@@ -99,7 +101,8 @@ static bool predicateApprox(StringRef name,
     // https://github.com/gpuweb/gpuweb/issues/5109 means we get compilation
     // errors whenever Inf or NaN values arise at compile-time, which is not
     // something that we can really prevent. Enable finite expansions only.
-    return name == math::CbrtOp::getOperationName();
+    return name == math::CbrtOp::getOperationName() ||
+           name == math::ErfcOp::getOperationName();
   }
 
   // Compute hasFastExp from target attribute.
