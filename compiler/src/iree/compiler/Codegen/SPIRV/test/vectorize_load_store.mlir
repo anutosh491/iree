@@ -732,3 +732,111 @@ func.func @extract_vector_transfer_read_mask_bits(%arg: vector<3xf32>, %index: i
 //     CHECK: scf.if %[[MB2]] -> (f32) {
 //     CHECK:   memref.load %{{.*}}[%[[C5]]] : memref<20xf32>
 //     CHECK: vector.from_elements {{.+}} : vector<3xf32>
+
+// -----
+
+#pipeline_layout = #hal.pipeline.layout<bindings = [
+  #hal.pipeline.binding<storage_buffer>,
+  #hal.pipeline.binding<storage_buffer>
+]>
+
+module attributes {hal.executable.target = #hal.executable.target<"webgpu-spirv", "webgpu-wgsl-fb", {}>} {
+  // CHECK-LABEL: func.func @webgpu_alias_scalar_store
+  // CHECK: hal.interface.binding.subspan {{.*}}binding(0){{.*}} : memref<128xf32>
+  func.func @webgpu_alias_scalar_store() -> vector<4xf32> {
+    %zero = arith.constant 0.0 : f32
+    %c0 = arith.constant 0 : index
+    %tid = gpu.thread_id x
+    %read = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<128xf32>
+    %scalar = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<64xf32>
+    %v = vector.transfer_read %read[%c0], %zero : memref<128xf32>, vector<4xf32>
+    memref.store %zero, %scalar[%tid] : memref<64xf32>
+    return %v : vector<4xf32>
+  }
+}
+
+// -----
+
+#pipeline_layout = #hal.pipeline.layout<bindings = [
+  #hal.pipeline.binding<storage_buffer>,
+  #hal.pipeline.binding<storage_buffer>
+]>
+
+module attributes {hal.executable.target = #hal.executable.target<"webgpu-spirv", "webgpu-wgsl-fb", {}>} {
+  // CHECK-LABEL: func.func @webgpu_alias_aligned_scalar_store
+  // CHECK: hal.interface.binding.subspan {{.*}}binding(0){{.*}} : memref<128xf32>
+  func.func @webgpu_alias_aligned_scalar_store() -> vector<4xf32> {
+    %zero = arith.constant 0.0 : f32
+    %c0 = arith.constant 0 : index
+    %tid = gpu.thread_id x
+    %read = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<128xf32>
+    %scalar = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<64xf32>
+    %aligned = memref.assume_alignment %scalar, 16 : memref<64xf32>
+    %v = vector.transfer_read %read[%c0], %zero : memref<128xf32>, vector<4xf32>
+    memref.store %zero, %aligned[%tid] : memref<64xf32>
+    return %v : vector<4xf32>
+  }
+}
+
+// -----
+
+#pipeline_layout = #hal.pipeline.layout<bindings = [
+  #hal.pipeline.binding<storage_buffer>,
+  #hal.pipeline.binding<storage_buffer>
+]>
+
+module attributes {hal.executable.target = #hal.executable.target<"webgpu-spirv", "webgpu-wgsl-fb", {}>} {
+  // CHECK-LABEL: func.func @webgpu_other_binding_scalar_store
+  // CHECK: hal.interface.binding.subspan {{.*}}binding(0){{.*}} : memref<32xvector<4xf32>>
+  func.func @webgpu_other_binding_scalar_store() -> vector<4xf32> {
+    %zero = arith.constant 0.0 : f32
+    %c0 = arith.constant 0 : index
+    %tid = gpu.thread_id x
+    %read = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<128xf32>
+    %scalar = hal.interface.binding.subspan layout(#pipeline_layout) binding(1) : memref<64xf32>
+    %v = vector.transfer_read %read[%c0], %zero : memref<128xf32>, vector<4xf32>
+    memref.store %zero, %scalar[%tid] : memref<64xf32>
+    return %v : vector<4xf32>
+  }
+}
+
+// -----
+
+#pipeline_layout = #hal.pipeline.layout<bindings = [
+  #hal.pipeline.binding<storage_buffer>,
+  #hal.pipeline.binding<storage_buffer>
+]>
+
+module {
+  // CHECK-LABEL: func.func @native_alias_scalar_store
+  // CHECK: hal.interface.binding.subspan {{.*}}binding(0){{.*}} : memref<32xvector<4xf32>>
+  func.func @native_alias_scalar_store() -> vector<4xf32> {
+    %zero = arith.constant 0.0 : f32
+    %c0 = arith.constant 0 : index
+    %tid = gpu.thread_id x
+    %read = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<128xf32>
+    %scalar = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<64xf32>
+    %v = vector.transfer_read %read[%c0], %zero : memref<128xf32>, vector<4xf32>
+    memref.store %zero, %scalar[%tid] : memref<64xf32>
+    return %v : vector<4xf32>
+  }
+}
+
+// -----
+
+#pipeline_layout = #hal.pipeline.layout<bindings = [#hal.pipeline.binding<storage_buffer>]>
+module attributes {hal.executable.target = #hal.executable.target<"webgpu-spirv", "webgpu-wgsl-fb", {}>} {
+  // CHECK-LABEL: func.func @webgpu_alias_scalarized_transfer
+  // CHECK: hal.interface.binding.subspan {{.*}}binding(0){{.*}} : memref<128xf32>
+  func.func @webgpu_alias_scalarized_transfer() -> vector<4xf32> {
+    %zero = arith.constant 0.0 : f32
+    %c0 = arith.constant 0 : index
+    %tid = gpu.thread_id x
+    %read = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<128xf32>
+    %scalar = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<64xf32>
+    %v = vector.transfer_read %read[%c0], %zero : memref<128xf32>, vector<4xf32>
+    %one = vector.broadcast %zero : f32 to vector<1xf32>
+    vector.transfer_write %one, %scalar[%tid] : vector<1xf32>, memref<64xf32>
+    return %v : vector<4xf32>
+  }
+}
