@@ -141,6 +141,7 @@ iree_py_library(
     "iree/runtime/_binding.py"
     "iree/runtime/_binding.pyi"
     "iree/runtime/array_interop.py"
+    "iree/runtime/asyncio.py"
     "iree/runtime/benchmark.py"
     "iree/runtime/dtypes.py"
     "iree/runtime/flags.py"
@@ -329,6 +330,13 @@ iree_py_test(
     array_interop_test
   SRCS
     "tests/array_interop_test.py"
+)
+
+iree_py_test(
+  NAME
+    asyncio_test
+  SRCS
+    "tests/asyncio_test.py"
 )
 
 iree_py_test(
