@@ -28,6 +28,8 @@
 #include "mlir/Dialect/SPIRV/IR/SPIRVTypes.h"
 #include "mlir/Dialect/SPIRV/IR/TargetAndABI.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/Dialect/Vector/Transforms/LoweringPatterns.h"
+#include "mlir/Dialect/Vector/Transforms/VectorRewritePatterns.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/PatternMatch.h"
@@ -207,6 +209,29 @@ struct ConvertWideVectorStore final : OpConversionPattern<memref::StoreOp> {
   }
 };
 
+struct ConvertExtractStridedSlice final
+    : OpConversionPattern<vector::ExtractStridedSliceOp> {
+  using Base::Base;
+
+  LogicalResult
+  matchAndRewrite(vector::ExtractStridedSliceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto resultType =
+        cast<VectorType>(getTypeConverter()->convertType(op.getType()));
+    // Explicitly include the added low/high-word dimension in the slice.
+    auto getInt = [](Attribute attr) {
+      return cast<IntegerAttr>(attr).getInt();
+    };
+    auto offsets = llvm::map_to_vector(op.getOffsets(), getInt);
+    auto strides = llvm::map_to_vector(op.getStrides(), getInt);
+    offsets.resize(resultType.getRank(), 0);
+    strides.resize(resultType.getRank(), 1);
+    rewriter.replaceOpWithNewOp<vector::ExtractStridedSliceOp>(
+        op, adaptor.getSource(), offsets, resultType.getShape(), strides);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Rewrite patterns
 //===----------------------------------------------------------------------===//
@@ -260,6 +285,9 @@ struct FlattenElementwisePattern final : RewritePattern {
     // Shape cast operands.
     auto operands = llvm::to_vector_of<Value, 2>(op->getOperands());
     for (Value &operand : operands) {
+      if (!isa<VectorType>(operand.getType())) {
+        continue;
+      }
       VectorType newOperandTy = flattenVectorType(operand.getType());
       if (!newOperandTy) {
         return failure();
@@ -292,7 +320,7 @@ static void
 populateIreeI64EmulationPatterns(arith::WideIntEmulationConverter &converter,
                                  RewritePatternSet &patterns) {
   patterns.add<ConvertHalInterfaceBindingSubspan, ConvertUtilAssumeIntOp,
-               ConvertWideBroadcast>(converter, patterns.getContext());
+               ConvertWideBroadcast, ConvertExtractStridedSlice>(converter, patterns.getContext());
 }
 
 static bool supportsI64(FunctionOpInterface op) {
@@ -374,6 +402,8 @@ struct SPIRVEmulateI64Pass final
     {
       RewritePatternSet patterns(ctx);
       patterns.add<FlattenElementwisePattern>(ctx, 100);
+      vector::populateVectorInsertExtractStridedSliceTransforms(patterns);
+      vector::populateVectorShapeCastLoweringPatterns(patterns);
       vector::ExtractOp::getCanonicalizationPatterns(patterns, ctx);
       vector::ExtractStridedSliceOp::getCanonicalizationPatterns(patterns, ctx);
       vector::InsertOp::getCanonicalizationPatterns(patterns, ctx);
