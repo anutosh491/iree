@@ -339,6 +339,13 @@ iree_py_test(
 
 iree_py_test(
   NAME
+    loop_cancellation_test
+  SRCS
+    "tests/loop_cancellation_test.py"
+)
+
+iree_py_test(
+  NAME
     flags_test
   SRCS
     "tests/flags_test.py"
