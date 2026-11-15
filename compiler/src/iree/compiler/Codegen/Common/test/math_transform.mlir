@@ -224,3 +224,20 @@ func.func @rewrite_fpowi_const_exponent_on_rocm(%arg0: f32) -> f32 attributes {
   %0 = math.fpowi %arg0, %c3 : f32, i32
   return %0 : f32
 }
+
+// -----
+
+// CHECK-LABEL: @cbrt_cpu_vector
+func.func @cbrt_cpu_vector(%arg0: vector<4xf32>) -> vector<4xf32> attributes {
+  hal.executable.target = #hal.executable.target<"llvm-cpu", "xyz", {target_triple = "x86_64-xyz-xyz"}>
+} {
+  // Vector types alone do not load the Vector dialect. The pass must load it
+  // before the approximation creates vector.broadcast operations.
+  // CHECK: math.absf
+  // CHECK: arith.bitcast
+  // CHECK: math.copysign
+  // CHECK-NOT: math.cbrt
+  // CHECK: return
+  %0 = math.cbrt %arg0 : vector<4xf32>
+  return %0 : vector<4xf32>
+}
