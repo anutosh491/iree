@@ -44,6 +44,36 @@ iree_wasm_cc_library(
   PUBLIC
 )
 
+iree_genrule(
+  NAME
+    emscripten_imports_gen
+  SRCS
+    "${PROJECT_SOURCE_DIR}/build_tools/wasm/emscripten_companion.py"
+    "${PROJECT_SOURCE_DIR}/build_tools/wasm/wasm_binary_bundler.py"
+    "emscripten_imports.c.in"
+    "proactor_imports.mjs"
+  OUTS
+    emscripten_imports.c
+  CMD
+    "python3 $(rootpath //build_tools/wasm:emscripten_companion.py) --source $(rootpath proactor_imports.mjs) --module iree_proactor --template $(rootpath emscripten_imports.c.in) --output $(execpath emscripten_imports.c)"
+)
+
+if(EMSCRIPTEN)
+iree_cc_library(
+  NAME
+    emscripten_imports
+  SRCS
+    "emscripten_imports.c"
+  DEPS
+    ::token_table
+  PUBLIC
+)
+endif()
+
+set(_proactor_platform_deps "")
+if(EMSCRIPTEN)
+  list(APPEND _proactor_platform_deps ::emscripten_imports)
+endif()
 iree_cc_library(
   NAME
     proactor
@@ -58,6 +88,7 @@ iree_cc_library(
     iree::async
     iree::async::util::sequence_emulation
     iree::base
+    ${_proactor_platform_deps}
   PUBLIC
 )
 
@@ -81,6 +112,7 @@ iree_cc_test(
   DEPS
     ::proactor
     iree::async
+    iree::base
     iree::testing::gtest
     iree::testing::gtest_main
 )

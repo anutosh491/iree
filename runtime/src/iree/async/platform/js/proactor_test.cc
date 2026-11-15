@@ -9,10 +9,15 @@
 #include <cstring>
 #include <vector>
 
+#if defined(__EMSCRIPTEN__)
+#include <ctime>
+#endif  // __EMSCRIPTEN__
+
 #include "iree/async/operations/scheduling.h"
 #include "iree/async/operations/semaphore.h"
 #include "iree/async/proactor.h"
 #include "iree/async/semaphore.h"
+#include "iree/base/time.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -108,6 +113,17 @@ TEST_F(JsProactorTest, CreateAndDestroy) {
   // SetUp and TearDown exercise create/destroy.
   EXPECT_NE(proactor_, nullptr);
 }
+
+#if defined(__EMSCRIPTEN__)
+TEST_F(JsProactorTest, ClockUsesLibcTimeDomain) {
+  struct timespec before, after;
+  ASSERT_EQ(clock_gettime(CLOCK_MONOTONIC, &before), 0);
+  iree_time_t now = iree_time_now();
+  ASSERT_EQ(clock_gettime(CLOCK_MONOTONIC, &after), 0);
+  EXPECT_GE(now, before.tv_sec * 1000000000ll + before.tv_nsec);
+  EXPECT_LE(now, after.tv_sec * 1000000000ll + after.tv_nsec);
+}
+#endif  // __EMSCRIPTEN__
 
 TEST_F(JsProactorTest, QueryCapabilities) {
   iree_async_proactor_capabilities_t capabilities =
