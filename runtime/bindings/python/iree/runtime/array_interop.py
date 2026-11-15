@@ -19,6 +19,7 @@ from ._binding import (
     MappedMemory,
     MemoryType,
     HalFence,
+    FileHandle,
 )
 from .dtypes import map_dtype_to_hal_element_type
 
@@ -181,7 +182,8 @@ class DeviceArray(numpy.lib.mixins.NDArrayOperatorsMixin):
                 wait_semaphores=HalFence.create_at(sem, 0),
                 signal_semaphores=HalFence.create_at(sem, 1),
             )
-            HalFence.create_at(sem, 1).wait()
+            if not HalFence.create_at(sem, 1).wait():
+                raise RuntimeError("Device-to-host transfer did not complete")
 
         # Check if the allocator supports importing host memory (HIP/CUDA do,
         # Vulkan's native allocator does not). On HIP the import path avoids
@@ -201,17 +203,15 @@ class DeviceArray(numpy.lib.mixins.NDArrayOperatorsMixin):
             )
             dma_and_wait(host_buf)
         else:
-            staging_usage = int(
-                BufferUsage.TRANSFER_TARGET | BufferUsage.MAPPING_SCOPED
+            result = np.empty(self._buffer_view.shape, dtype=raw_dtype)
+            target = FileHandle.wrap_memory(result, readable=False, writable=True)
+            sem = self._device.create_semaphore(0)
+            self._device.queue_write(
+                source, target,
+                wait_semaphores=HalFence.create_at(sem, 0),
+                signal_semaphores=HalFence.create_at(sem, 1),
             )
-            host_buf = alloc.allocate_buffer(
-                memory_type=mem_type,
-                allowed_usage=staging_usage,
-                allocation_size=source.byte_length(),
-            )
-            dma_and_wait(host_buf)
-            mapped = host_buf.map()
-            result = mapped.asarray(self._buffer_view.shape, raw_dtype)
+            HalFence.create_at(sem, 1).wait()
 
         if self._override_dtype is not None and self._override_dtype != raw_dtype:
             return result.astype(self._override_dtype)
