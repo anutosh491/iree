@@ -84,6 +84,7 @@ nanobind_add_module(iree_runtime_bindings_python_PyExtRt
 
 target_link_libraries(iree_runtime_bindings_python_PyExtRt
   PRIVATE
+  iree::async
   iree::async::util::proactor_pool
   iree::base
   iree::base::internal::path
@@ -342,6 +343,13 @@ iree_py_test(
     loop_cancellation_test
   SRCS
     "tests/loop_cancellation_test.py"
+)
+
+iree_py_test(
+  NAME
+    hal_device_loop_test
+  SRCS
+    "tests/hal_device_loop_test.py"
 )
 
 iree_py_test(
