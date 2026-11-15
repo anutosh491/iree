@@ -33,7 +33,8 @@ iree_include_cmake_plugin_dirs(
 
 add_subdirectory(src)
 
-if(IREE_BUILD_PYTHON_BINDINGS)
+option(IREE_BUILD_RUNTIME_PYTHON_BINDINGS "Build the runtime Python bindings" ON)
+if(IREE_BUILD_PYTHON_BINDINGS AND IREE_BUILD_RUNTIME_PYTHON_BINDINGS)
   configure_file(pyproject.toml pyproject.toml COPYONLY)
   configure_file(setup.py setup.py @ONLY)
   add_subdirectory(bindings/python)
