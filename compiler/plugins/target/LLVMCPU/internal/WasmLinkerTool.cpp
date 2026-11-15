@@ -11,6 +11,11 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/FormatVariadic.h"
 
+#if defined(__EMSCRIPTEN__)
+#include "lld/Common/Driver.h"
+LLD_HAS_DRIVER(wasm)
+#endif
+
 #define DEBUG_TYPE "llvm-linker"
 
 namespace mlir::iree_compiler::IREE::HAL {
@@ -91,13 +96,17 @@ public:
     artifacts.libraryFile.close();
 
     SmallVector<std::string, 8> flags = {
+#if defined(__EMSCRIPTEN__)
+        "wasm-ld",
+#else
         getWasmToolPath(),
+#endif
 
         // Forces LLD to act like wasm ld and produce WebAssembly files.
         // If not specified then lld tries to figure out what it is by progname
         // (ld, ld64, link, etc).
         // NOTE: must be first because lld sniffs argv[1]/argv[2].
-        "-flavor wasm",
+        "-flavor", "wasm",
 
         // entry symbol not defined (pass --no-entry to suppress): _start
         "--no-entry",
@@ -117,7 +126,7 @@ public:
         // "--import-memory",
         // "--shared-memory",
 
-        "-o " + artifacts.libraryFile.path,
+        "-o", artifacts.libraryFile.path,
     };
 
     // Strip debug information when not requested.
@@ -131,10 +140,20 @@ public:
       flags.push_back(objectFile.path);
     }
 
+#if defined(__EMSCRIPTEN__)
+    flags.push_back("--allow-undefined");
+    if (targetTriple.isArch64Bit()) flags.push_back("-mwasm64");
+    SmallVector<const char *> arguments;
+    for (const auto &flag : flags) arguments.push_back(flag.c_str());
+    const lld::DriverDef drivers[] = {{lld::Wasm, lld::wasm::link}};
+    auto result = lld::lldMain(arguments, llvm::outs(), llvm::errs(), drivers);
+    if (result.retCode != 0 || !result.canRunAgain) return std::nullopt;
+#else
     auto commandLine = llvm::join(flags, " ");
     if (failed(runLinkCommand(commandLine))) {
       return std::nullopt;
     }
+#endif
     return artifacts;
   }
 };

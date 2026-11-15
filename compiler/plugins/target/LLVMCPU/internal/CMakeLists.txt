@@ -10,6 +10,11 @@
 
 iree_add_all_subdirs()
 
+set(_LinkerTools_internal_platform_deps "")
+if(EMSCRIPTEN)
+  list(APPEND _LinkerTools_internal_platform_deps lldCommon)
+  list(APPEND _LinkerTools_internal_platform_deps lldWasm)
+endif()
 iree_cc_library(
   NAME
     LinkerTools_internal
@@ -27,6 +32,7 @@ iree_cc_library(
     MLIRSupport
     iree::compiler::Utils
     iree::compiler::plugins::target::LLVMCPU::LinkerTool_hdrs
+    ${_LinkerTools_internal_platform_deps}
   PUBLIC
 )
 
