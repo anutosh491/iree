@@ -35,4 +35,21 @@ iree_cc_library(
   PUBLIC
 )
 
+iree_cc_test(
+  NAME
+    DeviceTest
+  SRCS
+    "DeviceTest.cpp"
+  DEPS
+    ::Builtins
+    LLVMCore
+    LLVMMC
+    LLVMSupport
+    LLVMTarget
+    LLVMTargetParser
+    gmock
+    gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
