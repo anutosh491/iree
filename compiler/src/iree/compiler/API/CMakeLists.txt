@@ -168,6 +168,8 @@ iree_cc_library(
      # Force this to be a regular library with an empty source file.
      empty.c
   LINKOPTS
+    # Bind internal LLVM/MLIR callbacks locally in Wasm shared libraries.
+    $<$<PLATFORM_ID:Emscripten>:-Wl,-Bsymbolic>
     # Linux uses a linker script to version symbols.
     $<$<PLATFORM_ID:Linux>:-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/api_version.ld>
     # Hide all symbols from static archives (.a) linked into the shared library.
