@@ -127,6 +127,11 @@ set_target_properties(
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/iree/_runtime_libs"
 )
 
+if(EMSCRIPTEN AND TARGET iree_hal_drivers_webgpu_emscripten_imports)
+  target_compile_definitions(iree_runtime_bindings_python_PyExtRt
+    PRIVATE IREE_RUNTIME_HAS_EMSCRIPTEN_WEBGPU=1)
+endif()
+
 iree_py_library(
   NAME
     runtime
@@ -144,6 +149,7 @@ iree_py_library(
     "iree/runtime/system_setup.py"
     "iree/runtime/typing.py"
     "iree/runtime/version.py"
+    "iree/runtime/webgpu.py"
     "iree/_runtime/__init__.py"
     "iree/_runtime/libs.py"
     "iree/_runtime/scripts/iree_as_module/__main__.py"

@@ -20,6 +20,10 @@
 #include "./vm.h"
 #include "iree/base/tooling/flags.h"
 #include "iree/hal/drivers/init.h"
+#if defined(IREE_RUNTIME_HAS_EMSCRIPTEN_WEBGPU)
+#include "iree/hal/drivers/webgpu/emscripten.h"
+#include "iree/hal/drivers/webgpu/webgpu_imports.h"
+#endif
 
 namespace {
 // Stable storage for flag processing.  Flag handling uses string views,
@@ -46,6 +50,11 @@ NB_MODULE(_runtime, m) {
   SetupPyModuleBindings(m);
   SetupTokenizerBindings(m);
   SetupVmBindings(m);
+#if defined(IREE_RUNTIME_HAS_EMSCRIPTEN_WEBGPU)
+  m.def("_webgpu_initialize", &iree_hal_webgpu_emscripten_initialize);
+  m.def("_webgpu_is_ready", &iree_hal_webgpu_emscripten_is_ready);
+  m.def("_webgpu_can_block", []() { return iree_hal_webgpu_import_can_block(); });
+#endif
 
   // Adds the given set of strings to the global flags.  These new flags
   // take effect upon the next creation of a driver.  They do not affect

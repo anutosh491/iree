@@ -8,20 +8,37 @@
 
 #include "iree/async/platform/js/token_table.h"
 
+EM_JS(void, iree_async_emscripten_register_poll,
+      (uintptr_t proactor, uintptr_t callback, int pointer_bits), {
+  const host = Module['ireeAsyncHost'];
+  host.pollCallbacks ||= new Map();
+  const pointer = pointer_bits === 64 ? BigInt(proactor) : Number(proactor);
+  host.pollCallbacks.set(proactor, () => Module['wasmTable'].get(pointer_bits === 64 ? BigInt(callback) : Number(callback))(pointer));
+  host.context.exports ||= {};
+  host.context.exports.proactor_drain = () => {
+    for (const poll of host.pollCallbacks.values()) poll();
+  };
+});
+
+EM_JS(void, iree_async_emscripten_unregister_poll, (uintptr_t proactor), {
+  Module['ireeAsyncHost'].pollCallbacks?.delete(proactor);
+});
+
 EM_JS(void, iree_async_emscripten_initialize, (void), {
-  if (Module['ireeAsyncHost']) return;
+  if (Module['ireeAsyncHost']?.imports) return;
 
   @IREE_WASM_IMPORTS@
 
   // Share one host per Emscripten instance, including dynamically loaded libraries.
-  const context = {
+  const context = Module['ireeAsyncHost']?.context || {
     memory: wasmMemory,
     inline: true,
     clockNowNs: () => BigInt(Math.round(performance.now() * 1e6)),
   };
   Module['ireeAsyncHost'] = {
     context,
-    imports: createWasmImports(context).iree_proactor,
+    imports: Module['ireeAsyncHost']?.imports || createWasmImports(context).iree_proactor,
+
   };
 });
 

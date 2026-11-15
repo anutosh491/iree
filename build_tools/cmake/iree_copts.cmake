@@ -425,19 +425,7 @@ iree_select_compiler_opts(IREE_DEFAULT_LINKOPTS
     "-pdbpagesize:32768"
 )
 
-if(EMSCRIPTEN AND IREE_EXTERNAL_WEBGPU_HAL_DRIVER_FOUND)
-  iree_select_compiler_opts(IREE_DEFAULT_LINKOPTS
-    ALL
-      # TODO(scotttodd): Only add when using WebGPU in a library/binary?
-      "-sUSE_WEBGPU"
-      # Hack: Used to create sync versions of requestAdapter and requestDevice
-      # TODO(scotttodd): Only set for test binaries, avoid sync code in apps
-      #   this doesn't _break_ apps that don't use the sync functions, but it
-      #   does bloat their binary size (and each Emscripten flag comes with
-      #   some risk of breaking compatibility with other features)
-      "-sASYNCIFY"
-  )
-endif()
+
 
 #-------------------------------------------------------------------------------
 # Flag sets used different optimization profiles.
