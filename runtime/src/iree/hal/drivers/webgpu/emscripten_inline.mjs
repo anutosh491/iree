@@ -32,7 +32,10 @@ export function createInlineHost(context, createImports) {
       (async () => {
         const adapter = await navigator.gpu.requestAdapter();
         if (!adapter) throw Error('No WebGPU adapter');
-        device = await adapter.requestDevice();
+        device = await adapter.requestDevice({requiredLimits: {
+          maxBufferSize: adapter.limits.maxBufferSize,
+          maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+        }});
         device.lost.then(info => {failure = Error('WebGPU device lost: ' + info.message);});
         device.addEventListener('uncapturederror', event => {
           failure = event.error;
