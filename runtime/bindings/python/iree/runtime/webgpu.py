@@ -7,11 +7,17 @@
 """WebGPU initialization for asynchronous Emscripten hosts."""
 import asyncio
 from . import _binding
-from .system_setup import get_device
+from .system_setup import get_device, get_driver
 
 
-async def get_webgpu_device(*, timeout: float = 30):
-    """Initialize the browser WebGPU host and return IREE's device."""
+async def get_webgpu_device(*, timeout: float = 30, max_concurrent_operations: int = 0):
+    """Initialize WebGPU, optionally sizing its in-flight operation capacity.
+
+    Zero uses the runtime default and cached device. An explicit capacity
+    creates a separate device with the requested proactor sizing hint.
+    """
+    if max_concurrent_operations < 0:
+        raise ValueError('max_concurrent_operations must be nonnegative')
     start = getattr(_binding, '_webgpu_initialize', None)
     if start is None:
         raise RuntimeError('This runtime was not built with Emscripten WebGPU support')
@@ -27,4 +33,7 @@ async def get_webgpu_device(*, timeout: float = 30):
             await asyncio.sleep(0.001)
 
     await asyncio.wait_for(wait_until_ready(), timeout=timeout)
+    if max_concurrent_operations:
+        return get_driver('webgpu').create_device_by_uri(
+            'webgpu', max_concurrent_operations=max_concurrent_operations)
     return get_device('webgpu')
